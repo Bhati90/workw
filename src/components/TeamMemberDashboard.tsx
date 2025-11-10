@@ -11,6 +11,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { 
   Users, 
   Clock, 
@@ -33,8 +34,16 @@ export function TeamMemberDashboard() {
   const queryClient = useQueryClient();
 
   // Mock current user - in production, get from auth
-  const currentUserId = "team-member-id"; // TODO: Get from auth
+  const { data: currentUser } = useCurrentUser();
+const currentUserId = currentUser?.id;
 
+if (!currentUser || !currentUserId) {
+  return (
+    <div className="flex items-center justify-center h-[60vh]">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    </div>
+  );
+}
   // Fetch MY assigned bookings (need to find mukadam)
   const { data: myAssignments = [] } = useQuery({
     queryKey: ["my-assignments", currentUserId],

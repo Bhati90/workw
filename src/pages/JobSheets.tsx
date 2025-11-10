@@ -10,27 +10,30 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function JobSheets() {
   const { data: allocatedActivities = [], isLoading } = useQuery({
-    queryKey: ["job-sheets"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("allocated_activities")
-        .select("*")
-        .not("labour_team_id", "is", null)
-        .order("scheduled_date", { ascending: true });
-      
-      if (error) throw error;
-      return data || [];
-    },
-  });
+  queryKey: ["job-sheets"],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("allocated_activities")
+      .select("*")
+      .not("labour_team_id", "is", null)  // Keep as is
+      .gte("scheduled_date", new Date().toISOString().split('T')[0]) // Only future dates
+      .order("scheduled_date", { ascending: true });
+    
+    if (error) {
+      console.error("Error fetching allocated activities:", error);
+      throw error;
+    }
+    
+    console.log("Fetched allocated activities:", data); // Debug log
+    return data || [];
+  },
+});
 
   // Filter activities for the next 7 days
   const today = new Date();
   const nextWeek = addDays(today, 7);
   
-  const upcomingActivities = allocatedActivities.filter((activity) => {
-    const activityDate = new Date(activity.scheduled_date);
-    return isWithinInterval(activityDate, { start: today, end: nextWeek });
-  });
+  const upcomingActivities = allocatedActivities;
 
   // Group activities by labour team
   const activitiesByTeam = upcomingActivities.reduce((acc, activity) => {
