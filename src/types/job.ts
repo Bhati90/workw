@@ -42,6 +42,7 @@ export interface Job {
 export interface MukadamBid {
   id: string;
   job_id: string;
+  bid_id: string;
   mukadam: Mukadam;
   status: 'pending' | 'interested' | 'declined' | 'cancelled';
   bid_price_per_acre?: number;

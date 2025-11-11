@@ -22,7 +22,7 @@ export function BidHistoryDialog({ jobId, open, onOpenChange }: BidHistoryDialog
     queryKey: ["job-bid-details", jobId],
     queryFn: async () => {
       if (!jobId) return null;
-      const response = await fetch(`http://localhost:8000/api/jobs/${jobId}/bid_details/`);
+      const response = await fetch(`https://workw-mu.vercel.app/api/jobs/${jobId}/bid_details/`);
       if (!response.ok) throw new Error("Failed to fetch bid details");
       return response.json();
     },
