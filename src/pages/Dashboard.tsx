@@ -4,13 +4,18 @@ import { FounderDashboard } from "@/components/FounderDashboard";
 import { OperationsHeadDashboard } from "@/components/OperationHeadDashboard";
 import { TeamMemberDashboard } from "@/components/TeamMemberDashboard";
 import { GroundTeamDashboard } from "@/components/GroundTeamDashboard";
-import { FollowUpSuggestions } from "@/components/FollowUpSuggestions"; // ADD THIS
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // ADD THIS
+import { JobManagementDashboard } from "@/components/job-management/JobManagementDashboard";
+import { FollowUpSuggestions } from "@/components/FollowUpSuggestions";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import { useRealtimeUpdates } from "@/hooks/useRealUpdates";
 
 export default function Dashboard() {
   const { data: currentUser, isLoading } = useCurrentUser();
+  
+  // Enable real-time updates
+  useRealtimeUpdates();
 
   if (isLoading) {
     return (
@@ -22,59 +27,66 @@ export default function Dashboard() {
     );
   }
 
-  if (!currentUser) {
-    return (
-      <Layout>
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">Please log in to continue</p>
-          </CardContent>
-        </Card>
-      </Layout>
-    );
-  }
+  // if (!currentUser) {
+  //   return (
+  //     <Layout>
+  //       <Card>
+  //         <CardContent className="py-12 text-center">
+  //           <p className="text-muted-foreground">Please log in to continue</p>
+  //         </CardContent>
+  //       </Card>
+  //     </Layout>
+  //   );
+  // }
 
   return (
     <Layout>
-      {/* FOUNDER - Can see everything */}
-      {currentUser.role === "founder" && (
+      {/* FOUNDER - Can see everything including job management */}
+      {/* {currentUser.role === "founder" && ( */}
         <Tabs defaultValue="overview">
           <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="followups">Follow-ups</TabsTrigger>
+            {/* <TabsTrigger value="overview">Overview</TabsTrigger> */}
+            <TabsTrigger value="jobs">Job Management</TabsTrigger>
+            {/* <TabsTrigger value="followups">Follow-ups</TabsTrigger> */}
           </TabsList>
-          <TabsContent value="overview">
+          <TabsContent value="jobs">
+            <JobManagementDashboard />
+          </TabsContent>
+          {/* <TabsContent value="overview">
             <FounderDashboard />
           </TabsContent>
+          
           <TabsContent value="followups">
             <FollowUpSuggestions />
-          </TabsContent>
+          </TabsContent> */}
         </Tabs>
-      )}
+      {/* )} */}
 
-      {/* OPERATIONS HEAD - Gets follow-up tab */}
+{/*       
       {currentUser.role === "operations_head" && (
         <Tabs defaultValue="operations">
           <TabsList>
             <TabsTrigger value="operations">Operations</TabsTrigger>
+            <TabsTrigger value="jobs">Job Management</TabsTrigger>
             <TabsTrigger value="followups">Follow-ups</TabsTrigger>
           </TabsList>
           <TabsContent value="operations">
             <OperationsHeadDashboard />
           </TabsContent>
+          <TabsContent value="jobs">
+            <JobManagementDashboard />
+          </TabsContent>
           <TabsContent value="followups">
             <FollowUpSuggestions />
           </TabsContent>
         </Tabs>
       )}
 
-      {/* TEAM MEMBER */}
       {currentUser.role === "team_member" && <TeamMemberDashboard />}
 
-      {/* GROUND TEAM */}
       {currentUser.role === "ground_team" && <GroundTeamDashboard />}
 
-      {/* ACCOUNTS */}
+     
       {currentUser.role === "accounts" && (
         <Card>
           <CardContent className="py-12 text-center">
@@ -82,7 +94,7 @@ export default function Dashboard() {
             <p className="text-muted-foreground">Financial overview coming soon</p>
           </CardContent>
         </Card>
-      )}
+      )} */}
     </Layout>
   );
 }

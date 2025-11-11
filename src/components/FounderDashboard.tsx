@@ -190,9 +190,10 @@ export function FounderDashboard() {
         <p className="text-muted-foreground">Complete business overview and metrics</p>
       </div>
 
-      {/* Key Metrics */}
+     
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        </div>
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -243,7 +244,6 @@ export function FounderDashboard() {
         </Card>
       </div>
 
-      {/* Main Content Tabs */}
       <Tabs defaultValue="pipeline" className="space-y-4">
         <TabsList>
           <TabsTrigger value="pipeline">Booking Pipeline</TabsTrigger>
@@ -251,10 +251,10 @@ export function FounderDashboard() {
           <TabsTrigger value="mukadams">Mukadam Overview</TabsTrigger>
         </TabsList>
 
-        {/* Pipeline View */}
+        
         <TabsContent value="pipeline" className="space-y-4">
           <div className="grid md:grid-cols-3 gap-4">
-            {/* Pending Assignment */}
+           
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center justify-between">
@@ -275,7 +275,7 @@ export function FounderDashboard() {
               </CardContent>
             </Card>
 
-            {/* Awaiting Approval */}
+           
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center justify-between">
@@ -305,7 +305,7 @@ export function FounderDashboard() {
               </CardContent>
             </Card>
 
-            {/* In Progress */}
+           
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center justify-between">
@@ -331,7 +331,7 @@ export function FounderDashboard() {
           </div>
         </TabsContent>
 
-        {/* Team Performance */}
+        
         <TabsContent value="team" className="space-y-4">
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {teamPerformance.map((member) => (
@@ -366,7 +366,6 @@ export function FounderDashboard() {
         </TabsContent>
 
 
-        {/* Mukadam Overview */}
         <TabsContent value="mukadams" className="space-y-4">
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {mukadams.map((mukadam) => {
@@ -439,7 +438,7 @@ export function FounderDashboard() {
               </div>
              </div>
           </TabsContent>
-         </Tabs>
+         </Tabs> */}
       
     </div>
   );

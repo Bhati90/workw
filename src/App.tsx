@@ -12,6 +12,7 @@ import Bookings from "./pages/Bookings";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import { useCurrentUser } from "./hooks/useCurrentUser";
+import { JobManagementDashboard } from "./components/job-management/JobManagementDashboard";
 
 const queryClient = new QueryClient();
 
@@ -40,16 +41,14 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          {/* <Route path="/login" element={<Login />} /> */}
           <Route
             path="/"
             element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
+              <JobManagementDashboard />
             }
           />
-          <Route
+          {/* <Route
             path="/farmers"
             element={
               <ProtectedRoute>
@@ -88,7 +87,7 @@ const App = () => (
                 <JobSheets />
               </ProtectedRoute>
             }
-          />
+          /> */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

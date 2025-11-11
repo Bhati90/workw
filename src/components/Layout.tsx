@@ -55,7 +55,7 @@ export function Layout({ children }: LayoutProps) {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <nav className="flex gap-1">
+              {/* <nav className="flex gap-1">
                 {navigation.map((item) => (
                   <Link
                     key={item.path}
@@ -70,7 +70,7 @@ export function Layout({ children }: LayoutProps) {
                     {item.name}
                   </Link>
                 ))}
-              </nav>
+              </nav> */}
               <div className="flex items-center gap-2 border-l pl-4">
                 <NotificationBell />
                 {currentUser && (
