@@ -276,7 +276,7 @@ export function SimpleJobList() {
     </div>
   )}
 
-  {/* Show Interested Mukadams with team size comparison */}
+  {/* Show Interested Mukadams with team size comparison
   {job.interests && job.interests.filter(i => i.response_status === 'interested').length > 0 && (
     <div className="space-y-2">
       <h4 className="font-semibold text-green-600">✅ Interested Mukadams:</h4>
@@ -338,7 +338,7 @@ export function SimpleJobList() {
         })}
       </div>
     </div>
-  )}
+  )} */}
 </CardContent>
             
             <CardContent className="space-y-4">
