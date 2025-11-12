@@ -67,7 +67,7 @@ const [currentAssignments, setCurrentAssignments] = useState<string[]>([]);
 const handleReAssign = async (job: Job) => {
   // Get current assignments for this job
   try {
-    const response = await fetch(`http://localhost:8000/api/jobs/${job.id}/assignments/`);
+    const response = await fetch(`https://workcrop.onrender.com/api/jobs/${job.id}/assignments/`);
     const data = await response.json();
     setCurrentAssignments(data.assignments.map(a => a.mukadam_id));
     setReAssignJob(job);
@@ -144,6 +144,13 @@ console.log("Jobs by status:", {
       <Plus className="h-4 w-4 mr-2" />
       Add New Job
     </Button>
+
+    <div className="flex gap-2">
+  <Button onClick={() => setShowConfirmDialog(true)}>
+    <Plus className="h-4 w-4 mr-2" />
+    Confirm Job & Set Price
+  </Button>
+</div>
   </div>
 </div>
 
@@ -357,7 +364,12 @@ console.log("Jobs by status:", {
       </div>
 
       {/* Dialogs */}
+      {/* <JobConfirmationDialog 
+        open={showConfirmDialog}
+        onOpenChange={setShowConfirmDialog}
+      /> */}
       <JobConfirmationDialog 
+        job={selectedJob}
         open={showConfirmDialog}
         onOpenChange={setShowConfirmDialog}
       />

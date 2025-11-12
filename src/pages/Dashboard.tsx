@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useRealtimeUpdates } from "@/hooks/useRealUpdates";
+import { SimpleJobList } from "@/components/job-management/Simple";
 
 export default function Dashboard() {
   const { data: currentUser, isLoading } = useCurrentUser();
@@ -50,7 +51,8 @@ export default function Dashboard() {
             {/* <TabsTrigger value="followups">Follow-ups</TabsTrigger> */}
           </TabsList>
           <TabsContent value="jobs">
-            <JobManagementDashboard />
+            {/* <JobManagementDashboard /> */}
+            <SimpleJobList/>
           </TabsContent>
           {/* <TabsContent value="overview">
             <FounderDashboard />

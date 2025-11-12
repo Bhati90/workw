@@ -13,6 +13,7 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import { useCurrentUser } from "./hooks/useCurrentUser";
 import { JobManagementDashboard } from "./components/job-management/JobManagementDashboard";
+import { SimpleJobList } from "./components/job-management/Simple";
 
 const queryClient = new QueryClient();
 
@@ -45,7 +46,7 @@ const App = () => (
           <Route
             path="/"
             element={
-              <JobManagementDashboard />
+              <SimpleJobList />
             }
           />
           {/* <Route
