@@ -14,6 +14,7 @@ import NotFound from "./pages/NotFound";
 import { useCurrentUser } from "./hooks/useCurrentUser";
 import { JobManagementDashboard } from "./components/job-management/JobManagementDashboard";
 import { SimpleJobList } from "./components/job-management/Simple";
+import { FarmerProfile } from "./components/farmers/FarmerProflie";
 
 const queryClient = new QueryClient();
 
@@ -50,12 +51,10 @@ const App = () => (
             }
           />
           <Route
-            path="/farmers"
+            path="/farmers/:farmerId"
             element={
-              
-                <Farmers />
-              
-            }
+                <FarmerProfile/>
+              }
           />
            {/*
           <Route
