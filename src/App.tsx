@@ -40,7 +40,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename="/react">
         <Routes>
           {/* <Route path="/login" element={<Login />} /> */}
           <Route
@@ -49,14 +49,15 @@ const App = () => (
               <SimpleJobList />
             }
           />
-          {/* <Route
+          <Route
             path="/farmers"
             element={
-              <ProtectedRoute>
+              
                 <Farmers />
-              </ProtectedRoute>
+              
             }
           />
+           {/*
           <Route
             path="/labour-teams"
             element={

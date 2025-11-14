@@ -9,10 +9,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { Users } from "lucide-react";  
-import { CalendarIcon, Clock } from "lucide-react";
+import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { api } from '@/lib/api';
 
 interface JobAddingDialogProps {
   open: boolean;
@@ -40,27 +39,38 @@ export function JobAddingDialog({
   const [requestedTime, setRequestedTime] = useState("07:00");
   const [pricePerAcre, setPricePerAcre] = useState("");
   const [notes, setNotes] = useState("");
-  const [workersNeeded , setWorkersNeeded] = useState("5");
+  const [workersNeeded, setWorkersNeeded] = useState("5");
+  
   const queryClient = useQueryClient();
 
-  // In JobConfirmationDialog.tsx, update the mutation:
-
-
-const confirmJobMutation = useMutation({
-  mutationFn: async (jobData: any) => {
-    return api.confirmJob(jobData);  // Use the API client
-  },
-  onSuccess: () => {
-    toast.success("Job confirmed successfully!");
-    queryClient.invalidateQueries({ queryKey: ["jobs"] });
-    onOpenChange(false);
-    resetForm();
-  },
-  onError: (error) => {
-    console.error('API Error:', error);
-    toast.error("Failed to confirm job: " + error.message);
-  },
-});
+  const confirmJobMutation = useMutation({
+    mutationFn: async (jobData: any) => {
+      const response = await fetch("https://workcrop.onrender.com/api/jobs/confirm_job/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(jobData),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(JSON.stringify(error));
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success("Job confirmed successfully!");
+      queryClient.invalidateQueries({ queryKey: ["simple-jobs"] });
+      onOpenChange(false);
+      resetForm();
+    },
+    onError: (error) => {
+      console.error('API Error:', error);
+      toast.error("Failed to confirm job: " + error.message);
+    },
+  });
 
   const resetForm = () => {
     setFarmerName("");
@@ -75,7 +85,6 @@ const confirmJobMutation = useMutation({
     setWorkersNeeded("5");
     setNotes("");
   };
-
 
   const handleFarmSizeChange = (size: string) => {
     setFarmSize(size);
@@ -93,26 +102,34 @@ const confirmJobMutation = useMutation({
       setWorkersNeeded(suggestedWorkers.toString());
     }
   };
+
   const handleSubmit = () => {
-    if (!farmerName || !farmerPhone || !activityName || !farmSize || !requestedDate || !pricePerAcre || !workersNeeded) {
+    if ( !farmSize || !requestedDate || !pricePerAcre || !workersNeeded) {
       toast.error("Please fill all required fields");
       return;
     }
 
+    // ✅ Fix: Map to correct API field names
     const jobData = {
       farmer_name: farmerName,
-      farmer_phone: farmerPhone,
-      farmer_village: farmerVillage,
-      activity_name: activityName,
-      farm_size_acres: parseFloat(farmSize),
-      location: location,
+      phone_number: farmerPhone,  // ✅ Changed from farmer_phone
+      farmer_village: farmerVillage || location,
+      activity_briefs: [  // ✅ Wrap activity in array
+        {
+          activity_name: activityName,
+          acres: parseFloat(farmSize),
+          date_needed: format(requestedDate, "yyyy-MM-dd")
+        }
+      ],
+      location: location || farmerVillage,
       requested_date: format(requestedDate, "yyyy-MM-dd"),
       requested_time: requestedTime,
-      workersNeeded: parseInt(workersNeeded),
+      workers_needed: parseInt(workersNeeded),  // ✅ Changed from workersNeeded
       farmer_price_per_acre: parseFloat(pricePerAcre),
       notes: notes,
     };
 
+    console.log("Sending job data:", jobData);
     confirmJobMutation.mutate(jobData);
   };
 
@@ -173,11 +190,9 @@ const confirmJobMutation = useMutation({
                 placeholder="0.0"
               />
             </div>
-
-
           </div>
 
-          {/* ✅ ADD Workers Needed Field */}
+          {/* Workers and Location */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Workers Needed *</Label>
@@ -256,7 +271,8 @@ const confirmJobMutation = useMutation({
             />
           </div>
 
-{farmSize && workersNeeded && pricePerAcre && (
+          {/* Job Summary */}
+          {farmSize && workersNeeded && pricePerAcre && (
             <div className="p-4 bg-secondary/30 rounded space-y-2">
               <h4 className="font-semibold text-sm">Job Summary</h4>
               <div className="grid grid-cols-2 gap-4 text-sm">
@@ -281,6 +297,7 @@ const confirmJobMutation = useMutation({
               </div>
             </div>
           )}
+
           {/* Notes */}
           <div className="space-y-2">
             <Label>Notes</Label>
