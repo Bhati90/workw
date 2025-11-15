@@ -207,28 +207,34 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
     filterLocation !== "all" || filterActivity !== "all" || 
     filterDate || filterMukadam !== "all";
 
-  // Notify mukadams mutation
-  const notifyMukadamsMutation = useMutation({
-    mutationFn: async ({ jobId, mukadamIds }: { jobId: string, mukadamIds: string[] }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/notify_mukadams/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mukadam_ids: mukadamIds }),
-      });
-      if (!response.ok) throw new Error("Failed to notify mukadams");
-      return response.json();
-    },
-    onSuccess: (data) => {
-      toast.success(`Notified ${data.notified.length} mukadams!`);
-      queryClient.invalidateQueries({ queryKey: ["simple-jobs"] });
-      setShowMukadamDialog(false);
-      setSelectedMukadams([]);
-    },
-    onError: (error) => {
-      toast.error("Failed to notify mukadams: " + error.message);
-    },
-  });
 
+    const notifyMukadamsMutation = useMutation({
+  mutationFn: async ({ jobId, mukadamIds }: { jobId: string, mukadamIds: string[] }) => {
+    const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/notify_mukadams/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mukadam_ids: mukadamIds }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || "Failed to notify mukadams");
+    }
+
+    return response.json();
+  },
+  onSuccess: (data) => {
+    // ✅ FIX: Handle both old and new response format
+    const count = data.notified?.length || data.push_notifications_sent || 0;
+    toast.success(`Notified ${count} mukadams! Push sent: ${data.push_notifications_sent || 0}`);
+    queryClient.invalidateQueries({ queryKey: ["simple-jobs"] });
+    setShowMukadamDialog(false);
+    setSelectedMukadams([]);
+  },
+  onError: (error) => {
+    toast.error("Failed to notify mukadams: " + error.message);
+  },
+});
   // Assign job mutation
   const assignJobMutation = useMutation({
     mutationFn: async ({ jobId, mukadamId }: { jobId: string, mukadamId: string }) => {
@@ -395,7 +401,9 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Locations</SelectItem>
-                      {uniqueLocations.map(location => (
+                      {uniqueLocations
+  .filter(location => location && location.trim() !== '')
+  .map(location => (
                         <SelectItem key={location} value={location}>
                           {location}
                         </SelectItem>
