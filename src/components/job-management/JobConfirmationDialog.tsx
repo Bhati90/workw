@@ -20,7 +20,7 @@ export function JobConfirmationDialog({ job, open, onOpenChange }: JobConfirmati
 
   const confirmJobMutation = useMutation({
     mutationFn: async (priceData: { yourPrice: number }) => {
-      const response = await fetch("https://workcrop.onrender.com/api/job/confirm_and_price/", {
+      const response = await fetch("http://127.0.0.1:8000/api/job/confirm_and_price/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

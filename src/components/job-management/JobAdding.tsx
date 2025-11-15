@@ -45,7 +45,7 @@ export function JobAddingDialog({
 
   const confirmJobMutation = useMutation({
     mutationFn: async (jobData: any) => {
-      const response = await fetch("https://workcrop.onrender.com/api/jobs/confirm_job/", {
+      const response = await fetch("http://127.0.0.1:8000/api/jobs/confirm_job/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

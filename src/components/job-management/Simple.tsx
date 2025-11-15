@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-
+import { useNavigate } from "react-router-dom";
 import { MukadamManagementDialog } from "./MukadamManagementDialog";
 import { 
   Plus, 
@@ -29,11 +29,14 @@ import {
   IndianRupee,
   Search,
   X,
+  Edit,
   Filter
 } from "lucide-react";
 import { JobConfirmationDialog } from "./JobConfirmationDialog";
 import { Layout } from "../Layout";
 import{ JobAddingDialog } from "./JobAdding";
+
+import { JobEditDialog } from "./JobEdit";
 
 
 interface SimpleJob {
@@ -95,7 +98,11 @@ export function SimpleJobList() {
   const [selectedMukadams, setSelectedMukadams] = useState<string[]>([]);
   const [currentJobId, setCurrentJobId] = useState<string>("");
   const [showMukadamDialogBig, setShowMukadamDialogBig] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
 
+
+ const navigate = useNavigate();
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -111,7 +118,7 @@ export function SimpleJobList() {
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ["simple-jobs"],
     queryFn: async (): Promise<SimpleJob[]> => {
-      const response = await fetch("https://workcrop.onrender.com/api/jobs/simple_list/");
+      const response = await fetch("http://127.0.0.1:8000/api/jobs/simple_list/");
       if (!response.ok) throw new Error("Failed to fetch jobs");
       return response.json();
     },
@@ -122,7 +129,7 @@ export function SimpleJobList() {
   const { data: mukadams = [] } = useQuery({
     queryKey: ["mukadams"],
     queryFn: async (): Promise<Mukadam[]> => {
-      const response = await fetch("https://workcrop.onrender.com/api/mukadams/");
+      const response = await fetch("http://127.0.0.1:8000/api/mukadams/");
       if (!response.ok) throw new Error("Failed to fetch mukadams");
       const data = await response.json();
       return (data.results || data).filter((m: Mukadam) => m.is_active);
@@ -203,7 +210,7 @@ export function SimpleJobList() {
   // Notify mukadams mutation
   const notifyMukadamsMutation = useMutation({
     mutationFn: async ({ jobId, mukadamIds }: { jobId: string, mukadamIds: string[] }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/notify_mukadams/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${jobId}/notify_mukadams/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mukadam_ids: mukadamIds }),
@@ -225,7 +232,7 @@ export function SimpleJobList() {
   // Assign job mutation
   const assignJobMutation = useMutation({
     mutationFn: async ({ jobId, mukadamId }: { jobId: string, mukadamId: string }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/assign_final/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${jobId}/assign_final/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mukadam_id: mukadamId }),
@@ -293,17 +300,26 @@ export function SimpleJobList() {
             <h1 className="text-3xl font-bold"> Job Management</h1>
             <p className="text-muted-foreground">Confirm jobs, set prices, notify mukadams</p>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={() => setShowConfirmDialogAdd(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add New Job
-            </Button>
+          <div className="flex items-center gap-2 mt-4">
 
-            <Button variant="outline" onClick={() => setShowMukadamDialogBig(true)}>
-              <Users className="h-4 w-4 mr-2" />
-              Manage Mukadams
-            </Button>
-          </div>
+  <Button className="rounded-lg flex gap-2" onClick={() => setShowConfirmDialogAdd(true)}>
+    <Plus className="h-4 w-4" />
+    Add New Job
+  </Button>
+
+  <Button variant="outline" className="rounded-lg flex gap-2" onClick={() => setShowMukadamDialogBig(true)}>
+    <Users className="h-4 w-4" />
+    Manage Mukadams
+  </Button>
+
+  <Button variant="outline" className="rounded-lg flex gap-2" onClick={() => navigate('/farmers')}>
+    <Users className="h-4 w-4" />
+    Farmers
+  </Button>
+
+</div>
+
+
         </div>
 
         {/* Search and Filter Bar */}
@@ -448,35 +464,61 @@ export function SimpleJobList() {
         <div className="space-y-4">
           {filteredJobs.map((job) => (
             <Card key={job.id}>
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">
-                      {job.farmer.name} - {job.activity.name}
-                      {job.assigned_mukadam && (
-                        <Badge variant="outline" className="ml-2">
-                          Assigned to {job.assigned_mukadam.name}
-                        </Badge>
-                      )}
-                    </CardTitle>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        {job.location}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(job.requested_date).toLocaleDateString()}
-                      </span>
-                      <span>{job.farm_size_acres} acres</span>
-                    </div>
-                  </div>
-                  <Badge className={getStatusColor(job.status)}>
-                    {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-                  </Badge>
-                </div>
-              </CardHeader>
-              
+             <CardHeader>
+  <div className="flex justify-between items-start w-full">
+
+    {/* LEFT SIDE CONTENT */}
+    <div className="flex flex-col gap-1">
+      <CardTitle className="text-lg flex items-center gap-2">
+        {job.farmer.name} - {job.activity.name}
+
+        {job.assigned_mukadam && (
+          <Badge variant="outline">
+            Assigned to {job.assigned_mukadam.name}
+          </Badge>
+        )}
+      </CardTitle>
+
+      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <MapPin className="h-3 w-3" />
+          {job.location}
+        </span>
+
+        <span className="flex items-center gap-1">
+          <Calendar className="h-3 w-3" />
+          {new Date(job.requested_date).toLocaleDateString()}
+        </span>
+
+        <span>{job.farm_size_acres} acres</span>
+      </div>
+    </div>
+
+    {/* RIGHT SIDE ACTIONS */}
+    <div className="flex flex-col items-end gap-2">
+
+      {/* Status Badge */}
+      <Badge className={getStatusColor(job.status)}>
+        {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+      </Badge>
+
+      {/* Edit Button */}
+      <Button
+        variant="outline"
+        size="sm"
+        className="flex items-center gap-2"
+        onClick={() => {
+          setEditingJob(job);
+          setShowEditDialog(true);
+        }}
+      >
+        <Edit className="h-4 w-4" />
+        Edit Job
+      </Button>
+    </div>
+  </div>
+</CardHeader>
+
               <CardContent className="space-y-4">
                 {/* Job Requirements Info */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -617,12 +659,11 @@ export function SimpleJobList() {
                   </div>
                 )}
 
-                {/* Not Interested */}
                 {job.interests && job.interests.filter(i => i.response_status === 'declined').length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-red-600">❌ Not Interested:</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {job.interests.filter(i => !i.is_interested).map((interest) => (
+  <div className="space-y-2">
+    <h4 className="font-semibold text-red-600">❌ Not Interested:</h4>
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+      {job.interests.filter(i => i.response_status === 'declined').map((interest) => (
                         <div key={interest.id} className="text-sm text-red-600 bg-red-50 dark:bg-red-950/20 p-2 rounded">
                           {interest.mukadam.name}
                         </div>
@@ -725,6 +766,12 @@ export function SimpleJobList() {
           open={showConfirmDialogAdd}
           onOpenChange={setShowConfirmDialogAdd}
         />
+
+        <JobEditDialog
+  job={editingJob}
+  open={showEditDialog}
+  onOpenChange={setShowEditDialog}
+/>
       </div>
     </Layout>
   );

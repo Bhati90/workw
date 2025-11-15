@@ -23,7 +23,7 @@ export function MukadamAssignmentDialog({ job, open, onOpenChange }: MukadamAssi
   const { data: mukadamResponse = {}, isLoading } = useQuery({
     queryKey: ["mukadams"],
     queryFn: async () => {
-      const response = await fetch("https://workcrop.onrender.com/api/mukadams/");
+      const response = await fetch("http://127.0.0.1:8000/api/mukadams/");
       if (!response.ok) throw new Error("Failed to fetch mukadams");
       const data = await response.json();
       console.log("🔍 Mukadams API Response:", data);
@@ -44,7 +44,7 @@ const mukadams = Array.isArray(mukadamResponse?.results)
     mutationFn: async (mukadamIds: string[]) => {
       if (!job) throw new Error("No job selected");
       
-      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${job.id}/assign_to_mukadams/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${job.id}/assign_to_mukadams/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

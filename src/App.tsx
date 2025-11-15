@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Farmers from "./pages/Farmers";
 import LabourTeams from "./pages/LabourTeams";
@@ -15,6 +15,7 @@ import { useCurrentUser } from "./hooks/useCurrentUser";
 import { JobManagementDashboard } from "./components/job-management/JobManagementDashboard";
 import { SimpleJobList } from "./components/job-management/Simple";
 import { FarmerProfile } from "./components/farmers/FarmerProflie";
+import { FarmersList } from "./components/farmers/FarmerList";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// wrapper to read the route param and pass it to FarmerProfile
+function FarmerProfileWrapper() {
+  const params = useParams();
+  const farmerId = params?.farmerId;
+  return <FarmerProfile farmerId={farmerId} />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -44,18 +52,15 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           {/* <Route path="/login" element={<Login />} /> */}
-          <Route
-            path="/"
+<Route path="/"
             element={
               <SimpleJobList />
             }
           />
-          <Route
-            path="/farmers/:farmerId"
-            element={
-                <FarmerProfile/>
-              }
-          />
+         
+<Route path="/farmers" element={<FarmersList />} />
+<Route path="/farmers/:farmerId" element={<FarmerProfileWrapper />} />
+
            {/*
           <Route
             path="/labour-teams"
