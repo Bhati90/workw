@@ -118,7 +118,7 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ["simple-jobs"],
     queryFn: async (): Promise<SimpleJob[]> => {
-      const response = await fetch("http://127.0.0.1:8000/api/jobs/simple_list/");
+      const response = await fetch("https://workcrop.onrender.com/api/jobs/simple_list/");
       if (!response.ok) throw new Error("Failed to fetch jobs");
       return response.json();
     },
@@ -129,7 +129,7 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
   const { data: mukadams = [] } = useQuery({
     queryKey: ["mukadams"],
     queryFn: async (): Promise<Mukadam[]> => {
-      const response = await fetch("http://127.0.0.1:8000/api/mukadams/");
+      const response = await fetch("https://workcrop.onrender.com/api/mukadams/");
       if (!response.ok) throw new Error("Failed to fetch mukadams");
       const data = await response.json();
       return (data.results || data).filter((m: Mukadam) => m.is_active);
@@ -210,7 +210,7 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
   // Notify mukadams mutation
   const notifyMukadamsMutation = useMutation({
     mutationFn: async ({ jobId, mukadamIds }: { jobId: string, mukadamIds: string[] }) => {
-      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${jobId}/notify_mukadams/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/notify_mukadams/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mukadam_ids: mukadamIds }),
@@ -232,7 +232,7 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
   // Assign job mutation
   const assignJobMutation = useMutation({
     mutationFn: async ({ jobId, mukadamId }: { jobId: string, mukadamId: string }) => {
-      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${jobId}/assign_final/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/assign_final/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mukadam_id: mukadamId }),

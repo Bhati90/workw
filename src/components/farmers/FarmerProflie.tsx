@@ -81,7 +81,7 @@ export function FarmerProfile({ farmerId }: { farmerId: string }) {
   const { data: farmer, isLoading } = useQuery({
     queryKey: ["farmer", farmerId],
     queryFn: async (): Promise<Farmer> => {
-      const response = await fetch(`http://127.0.0.1:8000/api/farmers/${farmerId}/`);
+      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/`);
       if (!response.ok) throw new Error("Failed to fetch farmer");
       return response.json();
     },
@@ -91,7 +91,7 @@ export function FarmerProfile({ farmerId }: { farmerId: string }) {
   const { data: editHistory = [] } = useQuery({
     queryKey: ["farmer-history", farmerId],
     queryFn: async (): Promise<EditHistory[]> => {
-      const response = await fetch(`http://127.0.0.1:8000/api/farmers/${farmerId}/edit_history/`);
+      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/edit_history/`);
       if (!response.ok) throw new Error("Failed to fetch history");
       return response.json();
     },
@@ -100,7 +100,7 @@ export function FarmerProfile({ farmerId }: { farmerId: string }) {
   // Update farmer mutation
   const updateFarmerMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch(`http://127.0.0.1:8000/api/farmers/${farmerId}/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -123,8 +123,8 @@ export function FarmerProfile({ farmerId }: { farmerId: string }) {
   const savePlotMutation = useMutation({
     mutationFn: async (data: any) => {
       const url = editingPlot
-        ? `http://127.0.0.1:8000/api/farmers/${farmerId}/plots/${editingPlot.id}/`
-        : `http://127.0.0.1:8000/api/farmers/${farmerId}/plots/`;
+        ? `https://workcrop.onrender.com/api/farmers/${farmerId}/plots/${editingPlot.id}/`
+        : `https://workcrop.onrender.com/api/farmers/${farmerId}/plots/`;
       
       const response = await fetch(url, {
         method: editingPlot ? "PATCH" : "POST",
@@ -151,7 +151,7 @@ export function FarmerProfile({ farmerId }: { farmerId: string }) {
   const deletePlotMutation = useMutation({
     mutationFn: async (plotId: string) => {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/farmers/${farmerId}/plots/${plotId}/`,
+        `https://workcrop.onrender.com/api/farmers/${farmerId}/plots/${plotId}/`,
         { method: "DELETE" }
       );
       if (!response.ok) throw new Error("Failed to delete plot");

@@ -67,7 +67,7 @@ const [currentAssignments, setCurrentAssignments] = useState<string[]>([]);
 const handleReAssign = async (job: Job) => {
   // Get current assignments for this job
   try {
-    const response = await fetch(`http://127.0.0.1:8000/api/jobs/${job.id}/assignments/`);
+    const response = await fetch(`https://workcrop.onrender.com/api/jobs/${job.id}/assignments/`);
     const data = await response.json();
     setCurrentAssignments(data.assignments.map(a => a.mukadam_id));
     setReAssignJob(job);
@@ -79,7 +79,7 @@ const handleReAssign = async (job: Job) => {
   const { data: jobsResponse, isLoading, refetch } = useQuery({
     queryKey: ["jobs"],
     queryFn: async () => {
-      const response = await fetch("http://127.0.0.1:8000/api/jobs/");
+      const response = await fetch("https://workcrop.onrender.com/api/jobs/");
       if (!response.ok) throw new Error("Failed to fetch jobs");
       return response.json();
     },
@@ -89,7 +89,7 @@ const handleReAssign = async (job: Job) => {
     queryKey: ["bids", selectedJob?.id],
     queryFn: async (): Promise<MukadamBid[]> => {
       if (!selectedJob) return [];
-      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${selectedJob.id}/bids/`);
+      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${selectedJob.id}/bids/`);
       if (!response.ok) throw new Error("Failed to fetch bids");
       return response.json();
     },

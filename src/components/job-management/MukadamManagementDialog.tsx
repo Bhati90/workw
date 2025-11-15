@@ -73,7 +73,7 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
   const { data: activities = [] } = useQuery({
     queryKey: ["activities"],
     queryFn: async (): Promise<Activity[]> => {
-      const response = await fetch("http://127.0.0.1:8000/api/activities/");
+      const response = await fetch("https://workcrop.onrender.com/api/activities/");
       if (!response.ok) throw new Error("Failed to fetch activities");
       const data = await response.json();
       return data.results || data;
@@ -85,7 +85,7 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
   const { data: mukadams = [] } = useQuery({
     queryKey: ["mukadams-detailed"],
     queryFn: async (): Promise<MukadamDetail[]> => {
-      const response = await fetch("http://127.0.0.1:8000/api/mukadams/?detailed=true");
+      const response = await fetch("https://workcrop.onrender.com/api/mukadams/?detailed=true");
       if (!response.ok) throw new Error("Failed to fetch mukadams");
       const data = await response.json();
       console.log("🔍 Mukadams with rates:", data); // Debug log
@@ -99,7 +99,7 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
     queryKey: ["mukadam-job-history", viewingProfile],
     queryFn: async (): Promise<JobHistory[]> => {
       if (!viewingProfile) return [];
-      const response = await fetch(`http://127.0.0.1:8000/api/mukadams/${viewingProfile}/job_history/`);
+      const response = await fetch(`https://workcrop.onrender.com/api/mukadams/${viewingProfile}/job_history/`);
       if (!response.ok) throw new Error("Failed to fetch job history");
       const data = await response.json();
       return data.jobs || [];
@@ -110,8 +110,8 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
   const addMukadamMutation = useMutation({
     mutationFn: async (mukadamData: any) => {
       const url = isEditMode ? 
-        `http://127.0.0.1:8000/api/mukadams/${editingMukadam?.id}/` : 
-        "http://127.0.0.1:8000/api/mukadams/";
+        `https://workcrop.onrender.com/api/mukadams/${editingMukadam?.id}/` : 
+        "https://workcrop.onrender.com/api/mukadams/";
       
       const method = isEditMode ? "PATCH" : "POST";
       
@@ -142,7 +142,7 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
         }));
 
       if (activityRates.length > 0) {
-        await fetch("http://127.0.0.1:8000/api/mukadam-activity-rates/bulk_create/", {
+        await fetch("https://workcrop.onrender.com/api/mukadam-activity-rates/bulk_create/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rates: activityRates }),
