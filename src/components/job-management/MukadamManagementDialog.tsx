@@ -1,4 +1,3 @@
-// Complete enhanced MukadamManagementDialog.tsx
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,7 +13,8 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { 
   Plus, Users, MapPin, Phone, CheckCircle2, IndianRupee, 
-  Edit, Eye, TrendingUp, Calendar, Award
+  Edit, Eye, TrendingUp, Calendar, Award, Clock, XCircle,
+  ThumbsUp, Target
 } from "lucide-react";
 
 interface Activity {
@@ -44,6 +44,8 @@ interface MukadamDetail {
   completed_jobs: number;
   won_bids: number;
   avg_bid_price: number;
+  interested_jobs?: number;  // ✅ NEW
+  pending_responses?: number; // ✅ NEW
 }
 
 interface JobHistory {
@@ -51,10 +53,38 @@ interface JobHistory {
   farmer_name: string;
   activity_name: string;
   farm_size_acres: number;
-  finalized_price: number;
+  farmer_price_per_acre: number;
+  your_price_per_acre: number;
+  finalized_price: number | null;
   status: string;
   requested_date: string;
-  completed_at: string;
+  completed_at: string | null;
+  location: string;
+  workers_needed: number;
+  mukadam_response: {
+    is_interested: boolean;
+    response_status: 'pending' | 'interested' | 'declined' | 'assigned';
+    responded_at: string | null;
+    was_assigned: boolean;
+  };
+}
+
+interface JobHistoryResponse {
+  mukadam: MukadamDetail;
+  jobs: JobHistory[];
+  summary: {
+    total_notified: number;
+    interested: number;
+    won: number;
+    pending: number;
+    declined: number;
+  };
+}
+
+// Props for the MukadamManagementDialog component
+interface MukadamManagementDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagementDialogProps) {
@@ -73,7 +103,7 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
   const { data: activities = [] } = useQuery({
     queryKey: ["activities"],
     queryFn: async (): Promise<Activity[]> => {
-      const response = await fetch("https://workcrop.onrender.com/api/activities/");
+      const response = await fetch("https://workcrop.onrender.com//api/activities/");
       if (!response.ok) throw new Error("Failed to fetch activities");
       const data = await response.json();
       return data.results || data;
@@ -85,24 +115,23 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
   const { data: mukadams = [] } = useQuery({
     queryKey: ["mukadams-detailed"],
     queryFn: async (): Promise<MukadamDetail[]> => {
-      const response = await fetch("https://workcrop.onrender.com/api/mukadams/?detailed=true");
+      const response = await fetch("https://workcrop.onrender.com//api/mukadams/?detailed=true");
       if (!response.ok) throw new Error("Failed to fetch mukadams");
       const data = await response.json();
-      console.log("🔍 Mukadams with rates:", data); // Debug log
+      console.log("🔍 Mukadams with rates:", data);
       return data.results || data;
     },
     enabled: open,
   });
 
-  // Fetch job history for profile view
-  const { data: jobHistory = [] } = useQuery({
+  // Fetch comprehensive job history for profile view
+  const { data: jobHistoryData } = useQuery({
     queryKey: ["mukadam-job-history", viewingProfile],
-    queryFn: async (): Promise<JobHistory[]> => {
-      if (!viewingProfile) return [];
-      const response = await fetch(`https://workcrop.onrender.com/api/mukadams/${viewingProfile}/job_history/`);
+    queryFn: async (): Promise<JobHistoryResponse> => {
+      if (!viewingProfile) return { mukadam: {} as MukadamDetail, jobs: [], summary: {} as any };
+      const response = await fetch(`https://workcrop.onrender.com//api/mukadams/${viewingProfile}/job_history/`);
       if (!response.ok) throw new Error("Failed to fetch job history");
-      const data = await response.json();
-      return data.jobs || [];
+      return response.json();
     },
     enabled: !!viewingProfile,
   });
@@ -110,12 +139,11 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
   const addMukadamMutation = useMutation({
     mutationFn: async (mukadamData: any) => {
       const url = isEditMode ? 
-        `https://workcrop.onrender.com/api/mukadams/${editingMukadam?.id}/` : 
-        "https://workcrop.onrender.com/api/mukadams/";
+        `https://workcrop.onrender.com//api/mukadams/${editingMukadam?.id}/` : 
+        "https://workcrop.onrender.com//api/mukadams/";
       
       const method = isEditMode ? "PATCH" : "POST";
       
-      // Create or update mukadam
       const mukadamResponse = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -131,7 +159,6 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
       if (!mukadamResponse.ok) throw new Error(`Failed to ${isEditMode ? 'update' : 'add'} mukadam`);
       const mukadam = await mukadamResponse.json();
       
-      // Handle activity rates
       const activityRates = Object.entries(mukadamData.activities)
         .filter(([_, data]: [string, any]) => data.selected && data.rate)
         .map(([activityId, data]: [string, any]) => ({
@@ -142,7 +169,7 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
         }));
 
       if (activityRates.length > 0) {
-        await fetch("https://workcrop.onrender.com/api/mukadam-activity-rates/bulk_create/", {
+        await fetch("https://workcrop.onrender.com//api/mukadam-activity-rates/bulk_create/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rates: activityRates }),
@@ -179,7 +206,6 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
     setLocation(mukadam.location);
     setLabourers(mukadam.number_of_labourers.toString());
     
-    // Pre-populate activity rates
     const activityRates: {[key: string]: {selected: boolean, rate: string}} = {};
     mukadam.activity_rates?.forEach(rate => {
       activityRates[rate.activity.id] = {
@@ -242,151 +268,280 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
     });
   };
 
-  // Get mukadam profile data
+  // Helper function to get status badge
+  const getStatusBadge = (status: string, responseStatus?: string) => {
+    if (responseStatus === 'assigned' || status === 'assigned') {
+      return <Badge className="bg-green-500">✅ Assigned</Badge>;
+    }
+    if (responseStatus === 'interested') {
+      return <Badge className="bg-blue-500">👍 Interested</Badge>;
+    }
+    if (responseStatus === 'declined') {
+      return <Badge className="bg-red-500">❌ Declined</Badge>;
+    }
+    if (responseStatus === 'pending') {
+      return <Badge className="bg-yellow-500">⏳ Pending</Badge>;
+    }
+    return <Badge variant="outline">{status}</Badge>;
+  };
+
   const profileMukadam = mukadams.find(m => m.id === viewingProfile);
+  const jobHistory = jobHistoryData?.jobs || [];
+  const summary = jobHistoryData?.summary;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-7xl p-6">
-  <ScrollArea className="max-h-[85vh] pr-2">
+        <ScrollArea className="max-h-[85vh] pr-2">
+          <DialogHeader>
+            <DialogTitle>
+              {viewingProfile ? `${profileMukadam?.name} - Profile` : 
+               isEditMode ? `Edit ${editingMukadam?.name}` :
+               "Manage Mukadams & Activity Rates"}
+            </DialogTitle>
+          </DialogHeader>
 
-        <DialogHeader>
-          <DialogTitle>
-            {viewingProfile ? `${profileMukadam?.name} - Profile` : 
-             isEditMode ? `Edit ${editingMukadam?.name}` :
-             "Manage Mukadams & Activity Rates"}
-          </DialogTitle>
-        </DialogHeader>
+          {viewingProfile ? (
+            /* ENHANCED PROFILE VIEW */
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <Button variant="outline" onClick={() => setViewingProfile(null)}>
+                  ← Back to List
+                </Button>
+                <Button onClick={() => handleEdit(profileMukadam!)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Profile
+                </Button>
+              </div>
 
-        {viewingProfile ? (
-          /* PROFILE VIEW */
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <Button variant="outline" onClick={() => setViewingProfile(null)}>
-                ← Back to List
-              </Button>
-              <Button onClick={() => handleEdit(profileMukadam!)}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Profile
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Profile Summary */}
-              <Card className="lg:col-span-1">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {profileMukadam?.name}
-                    <Badge className={profileMukadam?.is_active ? "bg-green-500" : "bg-red-500"}>
-                      {profileMukadam?.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <span>{profileMukadam?.number_of_labourers} labourers</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span>{profileMukadam?.location}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span>{profileMukadam?.phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>Joined {new Date(profileMukadam?.created_at || '').toLocaleDateString()}</span>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Performance Stats */}
-                  <div className="grid grid-cols-2 gap-4 text-center">
-                    <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded">
-                      <div className="text-2xl font-bold text-blue-600">{profileMukadam?.total_jobs}</div>
-                      <div className="text-xs text-muted-foreground">Total Jobs</div>
-                    </div>
-                    <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded">
-                      <div className="text-2xl font-bold text-green-600">{profileMukadam?.completed_jobs}</div>
-                      <div className="text-xs text-muted-foreground">Completed</div>
-                    </div>
-                    <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded">
-                      <div className="text-2xl font-bold text-yellow-600">{profileMukadam?.won_bids}</div>
-                      <div className="text-xs text-muted-foreground">Won Bids</div>
-                    </div>
-                    <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded">
-                      <div className="text-2xl font-bold text-purple-600">₹{profileMukadam?.avg_bid_price}</div>
-                      <div className="text-xs text-muted-foreground">Avg Rate</div>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Activity Rates */}
-                  <div className="space-y-2">
-                    <Label className="font-medium">Activity Rates</Label>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Profile Summary */}
+                <Card className="lg:col-span-1">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      {profileMukadam?.name}
+                      <Badge className={profileMukadam?.is_active ? "bg-green-500" : "bg-red-500"}>
+                        {profileMukadam?.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      {profileMukadam?.activity_rates?.filter(rate => rate.is_available).map((rate) => (
-                        <div key={rate.id} className="flex justify-between items-center text-sm bg-secondary/30 p-2 rounded">
-                          <span>{rate.activity_name || rate.activity.name}</span>
-                          <span className="font-medium">₹{rate.rate_per_acre}/acre</span>
-                        </div>
-                      ))}
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <span>{profileMukadam?.number_of_labourers} labourers</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <span>{profileMukadam?.location}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground" />
+                        <span>{profileMukadam?.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span>Joined {new Date(profileMukadam?.created_at || '').toLocaleDateString()}</span>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
 
-              {/* Job History */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Job History</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[400px]">
-                    <div className="space-y-3">
-                      {jobHistory.map((job) => (
-                        <Card key={job.id} className="p-4">
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-1">
-                              <h4 className="font-semibold">{job.farmer_name}</h4>
-                              <p className="text-sm text-muted-foreground">{job.activity_name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {job.farm_size_acres} acres • {new Date(job.requested_date).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-semibold">₹{job.finalized_price}/acre</div>
-                              <div className="text-sm text-green-600">
-                                Total: ₹{(job.finalized_price * job.farm_size_acres).toLocaleString()}
-                              </div>
-                              <Badge className="mt-1" variant={job.status === 'completed' ? 'default' : 'secondary'}>
-                                {job.status}
-                              </Badge>
-                            </div>
+                    <Separator />
+
+                    {/* Enhanced Performance Stats */}
+                    <div className="space-y-2">
+                      <Label className="font-medium">Performance Overview</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Target className="h-4 w-4 text-blue-600" />
+                            <span className="text-xs text-muted-foreground">Notified</span>
                           </div>
-                        </Card>
-                      ))}
-                      
-                      {jobHistory.length === 0 && (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <Award className="h-12 w-12 mx-auto mb-2" />
-                          <p>No job history yet</p>
+                          <div className="text-2xl font-bold text-blue-600">
+                            {summary?.total_notified || profileMukadam?.total_jobs || 0}
+                          </div>
                         </div>
-                      )}
+                        
+                        <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Clock className="h-4 w-4 text-purple-600" />
+                            <span className="text-xs text-muted-foreground">Pending</span>
+                          </div>
+                          <div className="text-2xl font-bold text-purple-600">
+                            {summary?.pending || 0}
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded">
+                          <div className="flex items-center gap-2 mb-1">
+                            <ThumbsUp className="h-4 w-4 text-yellow-600" />
+                            <span className="text-xs text-muted-foreground">Interested</span>
+                          </div>
+                          <div className="text-2xl font-bold text-yellow-600">
+                            {summary?.interested || 0}
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 bg-red-50 dark:bg-red-950/20 rounded">
+                          <div className="flex items-center gap-2 mb-1">
+                            <XCircle className="h-4 w-4 text-red-600" />
+                            <span className="text-xs text-muted-foreground">Declined</span>
+                          </div>
+                          <div className="text-2xl font-bold text-red-600">
+                            {summary?.declined || 0}
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Award className="h-4 w-4 text-green-600" />
+                            <span className="text-xs text-muted-foreground">Won Jobs</span>
+                          </div>
+                          <div className="text-2xl font-bold text-green-600">
+                            {summary?.won || profileMukadam?.won_bids || 0}
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded">
+                          <div className="flex items-center gap-2 mb-1">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            <span className="text-xs text-muted-foreground">Completed</span>
+                          </div>
+                          <div className="text-2xl font-bold text-emerald-600">
+                            {profileMukadam?.completed_jobs || 0}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Success Rates */}
+                      <div className="space-y-2 pt-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Response Rate:</span>
+                          <span className="font-medium">
+                            {summary?.total_notified 
+                              ? Math.round(((summary.total_notified - summary.pending) / summary.total_notified) * 100)
+                              : 0}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Win Rate:</span>
+                          <span className="font-medium">
+                            {summary?.interested 
+                              ? Math.round((summary.won / summary.interested) * 100)
+                              : 0}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Avg Bid:</span>
+                          <span className="font-medium">₹{profileMukadam?.avg_bid_price || 0}/acre</span>
+                        </div>
+                      </div>
                     </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
+
+                    <Separator />
+
+                    {/* Activity Rates */}
+                    <div className="space-y-2">
+                      <Label className="font-medium">Activity Rates</Label>
+                      <div className="space-y-2">
+                        {profileMukadam?.activity_rates?.filter(rate => rate.is_available).map((rate) => (
+                          <div key={rate.id} className="flex justify-between items-center text-sm bg-secondary/30 p-2 rounded">
+                            <span>{rate.activity_name || rate.activity.name}</span>
+                            <span className="font-medium">₹{rate.rate_per_acre}/acre</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Job History */}
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Complete Job History ({jobHistory.length})</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      All jobs this mukadam was notified about
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[500px]">
+                      <div className="space-y-3">
+                        {jobHistory.map((job) => (
+                          <Card key={job.id} className="p-4">
+                            <div className="flex justify-between items-start">
+                              <div className="space-y-2 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-semibold">{job.farmer_name}</h4>
+                                  {getStatusBadge(job.status, job.mukadam_response.response_status)}
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                                  <div className="text-muted-foreground">
+                                    <span className="font-medium">{job.activity_name}</span>
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {job.farm_size_acres} acres
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {job.location}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {new Date(job.requested_date).toLocaleDateString()}
+                                  </div>
+                                </div>
+
+                                {/* Response Details */}
+                                <div className="text-xs text-muted-foreground">
+                                  {job.mukadam_response.responded_at ? (
+                                    <span>
+                                      Responded: {new Date(job.mukadam_response.responded_at).toLocaleString()}
+                                    </span>
+                                  ) : (
+                                    <span className="text-yellow-600">⏳ No response yet</span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="text-right space-y-1">
+                                <div className="text-sm text-muted-foreground">
+                                  Farmer: ₹{job.farmer_price_per_acre}/acre
+                                </div>
+                                {job.your_price_per_acre && (
+                                  <div className="text-sm font-medium text-green-600">
+                                    Your: ₹{job.your_price_per_acre}/acre
+                                  </div>
+                                )}
+                                {job.mukadam_response.was_assigned && job.finalized_price && (
+                                  <div className="text-sm font-bold text-blue-600">
+                                    Final: ₹{job.finalized_price}/acre
+                                  </div>
+                                )}
+                                {job.mukadam_response.was_assigned && (
+                                  <div className="text-sm font-semibold text-green-600">
+                                    Total: ₹{((job.finalized_price || 0) * job.farm_size_acres).toLocaleString()}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                        
+                        {jobHistory.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Award className="h-12 w-12 mx-auto mb-2" />
+                            <p>No job history yet</p>
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-          </div>
-        ) : (
-          /* MAIN MANAGEMENT VIEW */
-          <Tabs defaultValue={isEditMode ? "add" : "list"} className="w-full">
+          ) : (
+            /* MAIN MANAGEMENT VIEW - Keep existing code */
+            <Tabs defaultValue={isEditMode ? "add" : "list"} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="add">
                 {isEditMode ? "Edit Mukadam" : "Add New Mukadam"}
@@ -557,8 +712,9 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
                         <div className="grid grid-cols-3 gap-2 text-center">
                           <div className="text-xs">
                             <div className="font-bold">{mukadam.total_jobs}</div>
-                            <div className="text-muted-foreground">Jobs</div>
+                            <div className="text-muted-foreground">Notified</div>
                           </div>
+                          
                           <div className="text-xs">
                             <div className="font-bold">{mukadam.won_bids}</div>
                             <div className="text-muted-foreground">Won</div>
@@ -598,7 +754,7 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
               </ScrollArea>
             </TabsContent>
           </Tabs>
-        )}
+          )}
         </ScrollArea>
       </DialogContent>
     </Dialog>

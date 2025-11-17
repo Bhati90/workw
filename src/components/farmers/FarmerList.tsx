@@ -22,6 +22,8 @@ import { toast } from "sonner";
 import { Layout } from "../Layout";
 import { format } from "date-fns";
 
+
+
 interface Plot {
   id: string;
   acres: number;
@@ -70,11 +72,11 @@ export function FarmersList() {
   const { data: farmers = [], isLoading } = useQuery({
     queryKey: ["farmers"],
     // queryFn: async (): Promise<Farmer[]> => {
-    //   const response = await fetch("https://workcrop.onrender.com/api/farmers/");
+    //   const response = await fetch("https://workcrop.onrender.com//api/farmers/");
     //   if (!response.ok) throw new Error("Failed to fetch farmers");
     //   return response.json();
     queryFn: async (): Promise<Farmer[]> => {
-  const response = await fetch("https://workcrop.onrender.com/api/farmers/");
+  const response = await fetch("https://workcrop.onrender.com//api/farmers/");
   const data = await response.json();
   return data.results;  // ← FIX
 
@@ -83,6 +85,8 @@ export function FarmersList() {
 
     ,
   });
+
+
 
   // Filter farmers based on search
   const list = farmers ?? [];   // Safeguard
@@ -99,7 +103,7 @@ const filteredFarmers = useMemo(() => {
   // Add farmer mutation
   const addFarmerMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("https://workcrop.onrender.com/api/farmers/", {
+      const response = await fetch("https://workcrop.onrender.com//api/farmers/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -121,7 +125,7 @@ const filteredFarmers = useMemo(() => {
   // Update farmer mutation
   const updateFarmerMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string, data: any }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${id}/`, {
+      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${id}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -143,7 +147,7 @@ const filteredFarmers = useMemo(() => {
   // Delete farmer mutation
   const deleteFarmerMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${id}/`, {
+      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${id}/`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete farmer");
@@ -160,7 +164,7 @@ const filteredFarmers = useMemo(() => {
   // Add plot mutation
   const addPlotMutation = useMutation({
     mutationFn: async ({ farmerId, data }: { farmerId: string, data: any }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/plots/`, {
+      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${farmerId}/plots/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -182,7 +186,7 @@ const filteredFarmers = useMemo(() => {
   // Edit plot mutation
   const editPlotMutation = useMutation({
     mutationFn: async ({ farmerId, plotId, data }: { farmerId: string, plotId: string, data: any }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/plots/${plotId}/`, {
+      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${farmerId}/plots/${plotId}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -202,7 +206,7 @@ const filteredFarmers = useMemo(() => {
   // Delete plot mutation
   const deletePlotMutation = useMutation({
     mutationFn: async ({ farmerId, plotId }: { farmerId: string, plotId: string }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/plots/${plotId}/`, {
+      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${farmerId}/plots/${plotId}/`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete plot");
@@ -295,6 +299,108 @@ const filteredFarmers = useMemo(() => {
       }
     });
   };
+
+
+
+  const generateICSCalendar = (farmer: Farmer) => {
+  const formatDateForICS = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    // For all-day events, use YYYYMMDD format
+    return date.toISOString().split('T')[0].replace(/-/g, '');
+  };
+
+  let icsContent = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//WorkCrop//Farmer Calendar//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${farmer.name} - Farm Activities`,
+    'X-WR-TIMEZONE:Asia/Kolkata',
+    'X-WR-CALDESC:Farm plot activities and pruning dates'
+  ];
+
+  farmer.plots.forEach((plot, index) => {
+    const uid = `${farmer.id}-${plot.id}-${Date.now()}@workcrop.com`;
+    const created = formatDateForICS(new Date().toISOString());
+    const eventDate = formatDate(plot.pruning_date);
+    
+    // Calculate one day after for DTEND (required for all-day events)
+    const endDate = new Date(plot.pruning_date);
+    endDate.setDate(endDate.getDate() + 1);
+    const eventEndDate = formatDate(endDate.toISOString());
+
+    const summary = `${plot.activity_name || 'Farm Activity'} - ${plot.acres} acres`;
+    const description = [
+      `Farmer: ${farmer.name}`,
+      `Phone: ${farmer.phone}`,
+      `Village: ${farmer.village}`,
+      `Plot Size: ${plot.acres} acres`,
+      plot.location ? `Location: ${plot.location}` : '',
+      plot.activity_name ? `Activity: ${plot.activity_name}` : '',
+      `Pruning Date: ${format(new Date(plot.pruning_date), 'MMMM d, yyyy')}`
+    ].filter(Boolean).join('\\n');
+
+    const location = plot.location 
+      ? `${plot.location}, ${farmer.village}` 
+      : farmer.village;
+
+    icsContent.push(
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `DTSTAMP:${created}`,
+      `DTSTART;VALUE=DATE:${eventDate}`,
+      `DTEND;VALUE=DATE:${eventEndDate}`,
+      `SUMMARY:${summary}`,
+      `DESCRIPTION:${description}`,
+      `LOCATION:${location}`,
+      'STATUS:CONFIRMED',
+      'TRANSP:TRANSPARENT',
+      'BEGIN:VALARM',
+      'TRIGGER:-P1D',
+      'ACTION:DISPLAY',
+      `DESCRIPTION:Reminder: ${summary}`,
+      'END:VALARM',
+      'END:VEVENT'
+    );
+  });
+
+  icsContent.push('END:VCALENDAR');
+
+  return icsContent.join('\r\n');
+};
+
+// Add this function to download the ICS file
+const downloadCalendar = (farmer: Farmer) => {
+  try {
+    const icsContent = generateICSCalendar(farmer);
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Clean filename
+    const fileName = `${farmer.name.replace(/[^a-z0-9]/gi, '_')}_farm_calendar.ics`;
+    link.download = fileName;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    toast.success(`Calendar exported for ${farmer.name}!`, {
+      description: 'Import the .ics file into your calendar app'
+    });
+  } catch (error) {
+    toast.error('Failed to export calendar');
+    console.error('Calendar export error:', error);
+  }
+};
 
   if (isLoading) {
     return <div className="flex justify-center py-8">Loading farmers...</div>;
@@ -439,20 +545,25 @@ const filteredFarmers = useMemo(() => {
                   Add Plot
                 </Button>
 
-                {/* Export Calendar */}
                 <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Export calendar logic
-                    toast.info("Calendar export coming soon!");
-                  }}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Calendar
-                </Button>
+  variant="outline" 
+  size="sm" 
+  className="w-full"
+  onClick={(e) => {
+    e.stopPropagation();
+    if (farmer.plots.length === 0) {
+      toast.error('No plots to export', {
+        description: 'Add at least one plot before exporting calendar'
+      });
+      return;
+    }
+    downloadCalendar(farmer);
+  }}
+  disabled={farmer.plots.length === 0}
+>
+  <Download className="h-4 w-4 mr-2" />
+  Export Calendar {farmer.plots.length > 0 && `(${farmer.plots.length})`}
+</Button>
               </CardContent>
             </Card>
           ))}

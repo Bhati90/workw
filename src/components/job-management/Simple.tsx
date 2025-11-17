@@ -81,6 +81,15 @@ interface SimpleJob {
   }>;
 }
 
+interface ActivityRate {
+  id: string;
+  activity: string;
+  activity_name: string;
+  rate_per_acre: string;
+  is_available: boolean;
+  created_at: string;
+}
+
 interface Mukadam {
   id: string;
   name: string;
@@ -88,6 +97,11 @@ interface Mukadam {
   location: string;
   number_of_labourers: number;
   is_active: boolean;
+  activity_rates?: ActivityRate[];
+  total_jobs?: number;
+  completed_jobs?: number;
+  won_bids?: number;
+  avg_bid_price?: number;
 }
 
 export function SimpleJobList() {
@@ -118,7 +132,7 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ["simple-jobs"],
     queryFn: async (): Promise<SimpleJob[]> => {
-      const response = await fetch("https://workcrop.onrender.com/api/jobs/simple_list/");
+      const response = await fetch("https://workcrop.onrender.com//api/jobs/simple_list/");
       if (!response.ok) throw new Error("Failed to fetch jobs");
       return response.json();
     },
@@ -127,15 +141,15 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
 
   // Fetch mukadams for notification
   const { data: mukadams = [] } = useQuery({
-    queryKey: ["mukadams"],
-    queryFn: async (): Promise<Mukadam[]> => {
-      const response = await fetch("https://workcrop.onrender.com/api/mukadams/");
-      if (!response.ok) throw new Error("Failed to fetch mukadams");
-      const data = await response.json();
-      return (data.results || data).filter((m: Mukadam) => m.is_active);
-    },
-    enabled: showMukadamDialog,
-  });
+  queryKey: ["mukadams-detailed"],
+  queryFn: async (): Promise<Mukadam[]> => {
+    const response = await fetch("https://workcrop.onrender.com//api/mukadams/?detailed=true");
+    if (!response.ok) throw new Error("Failed to fetch mukadams");
+    const data = await response.json();
+    return (data.results || data).filter((m: Mukadam) => m.is_active);
+  },
+  enabled: showMukadamDialog,
+});
 
   // Extract unique values for filters
   const uniqueLocations = useMemo(() => {
@@ -157,6 +171,18 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
     });
     return Array.from(mukadamSet).sort();
   }, [jobs]);
+
+
+  const allMukadamsSelected = mukadams.length > 0 && selectedMukadams.length === mukadams.length;
+
+// Add this helper function to toggle all mukadams
+const toggleAllMukadams = () => {
+  if (allMukadamsSelected) {
+    setSelectedMukadams([]);
+  } else {
+    setSelectedMukadams(mukadams.map(m => m.id));
+  }
+};
 
   // Filter and search jobs
   const filteredJobs = useMemo(() => {
@@ -210,7 +236,7 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
 
     const notifyMukadamsMutation = useMutation({
   mutationFn: async ({ jobId, mukadamIds }: { jobId: string, mukadamIds: string[] }) => {
-    const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/notify_mukadams/`, {
+    const response = await fetch(`https://workcrop.onrender.com//api/jobs/${jobId}/notify_mukadams/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mukadam_ids: mukadamIds }),
@@ -238,7 +264,7 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
   // Assign job mutation
   const assignJobMutation = useMutation({
     mutationFn: async ({ jobId, mukadamId }: { jobId: string, mukadamId: string }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/assign_final/`, {
+      const response = await fetch(`https://workcrop.onrender.com//api/jobs/${jobId}/assign_final/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mukadam_id: mukadamId }),
@@ -536,8 +562,8 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
                   </div>
                   {job.workers_needed && (
                     <div>
-                      <span className="text-muted-foreground">Workers Needed:</span>
-                      <p className="font-semibold">{job.workers_needed} workers</p>
+                      <span className="text-muted-foreground">Based on Farm Size Workers Needed:</span>
+                      <p className="font-semibold">approx {job.workers_needed}  </p>
                     </div>
                   )}
                 </div>
@@ -705,54 +731,162 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
           </Card>
         )}
 
-        {/* Mukadam Selection Dialog */}
         <Dialog open={showMukadamDialog} onOpenChange={setShowMukadamDialog}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Select Mukadams to Notify</DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              <ScrollArea className="h-[300px]">
-                <div className="space-y-2">
-                  {mukadams.map((mukadam) => (
-                    <div key={mukadam.id} className="flex items-center space-x-3 p-3 border rounded">
-                      <Checkbox
-                        checked={selectedMukadams.includes(mukadam.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedMukadams(prev => [...prev, mukadam.id]);
-                          } else {
-                            setSelectedMukadams(prev => prev.filter(id => id !== mukadam.id));
-                          }
-                        }}
-                      />
-                      <div className="flex-1">
-                        <p className="font-semibold">{mukadam.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {mukadam.location} • {mukadam.number_of_labourers} workers • {mukadam.phone}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
+  <DialogContent className="max-w-3xl max-h-[80vh]">
+    <DialogHeader>
+      <DialogTitle>Select Mukadams to Notify</DialogTitle>
+      <p className="text-sm text-muted-foreground">
+        Choose mukadams to notify about this job opportunity
+      </p>
+    </DialogHeader>
+    
+    <div className="space-y-4">
+      {/* Select All Checkbox */}
+      <div className="flex items-center space-x-3 p-3 border-b-2 border-primary/20 bg-muted/50 rounded-t">
+        <Checkbox
+          checked={allMukadamsSelected}
+          onCheckedChange={toggleAllMukadams}
+          id="select-all"
+        />
+        <label 
+          htmlFor="select-all" 
+          className="font-semibold text-sm cursor-pointer flex-1"
+        >
+          Select All ({mukadams.length} mukadams)
+        </label>
+        {selectedMukadams.length > 0 && (
+          <Badge variant="secondary">
+            {selectedMukadams.length} selected
+          </Badge>
+        )}
+      </div>
+
+      <ScrollArea className="h-[400px] pr-4">
+        <div className="space-y-3">
+          {mukadams.map((mukadam) => (
+            <div 
+              key={mukadam.id} 
+              className={`
+                flex items-start space-x-3 p-4 border rounded-lg transition-all
+                ${selectedMukadams.includes(mukadam.id) 
+                  ? 'border-primary bg-primary/5' 
+                  : 'border-border hover:border-primary/50'
+                }
+              `}
+            >
+              <Checkbox
+                checked={selectedMukadams.includes(mukadam.id)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setSelectedMukadams(prev => [...prev, mukadam.id]);
+                  } else {
+                    setSelectedMukadams(prev => prev.filter(id => id !== mukadam.id));
+                  }
+                }}
+                className="mt-1"
+              />
               
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setShowMukadamDialog(false)} className="flex-1">
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleSendNotifications}
-                  disabled={selectedMukadams.length === 0 || notifyMukadamsMutation.isPending}
-                  className="flex-1"
-                >
-                  {notifyMukadamsMutation.isPending ? "Sending..." : `Notify ${selectedMukadams.length} Mukadams`}
-                </Button>
+              <div className="flex-1 space-y-2">
+                {/* Mukadam Header */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-semibold text-base">{mukadam.name}</p>
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {mukadam.location}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {mukadam.number_of_labourers} workers
+                      </span>
+                      <span>{mukadam.phone}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Stats Badges */}
+                  {(mukadam.total_jobs !== undefined || mukadam.won_bids !== undefined) && (
+                    <div className="flex gap-2">
+                      {mukadam.total_jobs !== undefined && (
+                        <Badge variant="outline" className="text-xs">
+                          {mukadam.total_jobs} jobs
+                        </Badge>
+                      )}
+                      {mukadam.won_bids !== undefined && mukadam.won_bids > 0 && (
+                        <Badge variant="secondary" className="text-xs">
+                          {mukadam.won_bids} won
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Activity Rates */}
+                {mukadam.activity_rates && mukadam.activity_rates.length > 0 ? (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Available Activities & Rates:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {mukadam.activity_rates
+                        .filter(rate => rate.is_available)
+                        .map((rate) => (
+                          <div 
+                            key={rate.id}
+                            className="flex items-center gap-1.5 px-2 py-1 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded text-xs"
+                          >
+                            <span className="font-medium text-green-700 dark:text-green-400">
+                              {rate.activity_name}
+                            </span>
+                            <span className="text-green-600 dark:text-green-500">
+                              ₹{rate.rate_per_acre}/acre
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">
+                    No activity rates specified
+                  </p>
+                )}
+
+                {/* Average Bid Price */}
+                {/* {mukadam.avg_bid_price && mukadam.avg_bid_price > 0 && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    Avg. Bid: ₹{mukadam.avg_bid_price.toLocaleString()}
+                  </p>
+                )} */}
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
+          ))}
+        </div>
+      </ScrollArea>
+      
+      {/* Action Buttons */}
+      <div className="flex gap-3 pt-4 border-t">
+        <Button 
+          variant="outline" 
+          onClick={() => {
+            setShowMukadamDialog(false);
+            setSelectedMukadams([]);
+          }}
+          className="flex-1"
+        >
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleSendNotifications}
+          disabled={selectedMukadams.length === 0 || notifyMukadamsMutation.isPending}
+          className="flex-1"
+        >
+          {notifyMukadamsMutation.isPending 
+            ? "Sending..." 
+            : `Notify ${selectedMukadams.length} Mukadam${selectedMukadams.length !== 1 ? 's' : ''}`
+          }
+        </Button>
+      </div>
+    </div>
+  </DialogContent>
+</Dialog>
 
         <MukadamManagementDialog 
           open={showMukadamDialogBig}
