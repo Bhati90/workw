@@ -77,7 +77,7 @@ export function FarmerProfile({ farmerId }: { farmerId: string }) {
 
   const queryClient = useQueryClient();
 
-  // Fetch farmer details
+// Fetch farmer details
   const { data: farmer, isLoading } = useQuery({
     queryKey: ["farmer", farmerId],
     queryFn: async (): Promise<Farmer> => {
