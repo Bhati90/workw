@@ -58,7 +58,7 @@ export function JobEditDialog({ job, open, onOpenChange }: JobEditDialogProps) {
 
   // Fetch edit history
   const fetchEditHistory = async (jobId: string) => {
-    const response = await fetch(`https://workcrop.onrender.com//api/jobs/${jobId}/edit_history/`);
+    const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/edit_history/`);
     if (!response.ok) throw new Error("Failed to fetch history");
     const data = await response.json();
     setEditHistory(data);
@@ -67,7 +67,7 @@ export function JobEditDialog({ job, open, onOpenChange }: JobEditDialogProps) {
   // Update job mutation
   const updateJobMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch(`https://workcrop.onrender.com//api/jobs/${job.id}/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${job.id}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

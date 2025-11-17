@@ -32,7 +32,7 @@ export function JobStatusUpdater({ job, onStatusUpdate }: JobStatusUpdaterProps)
 
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
-      const response = await fetch(`https://workcrop.onrender.com//api/jobs/${job.id}/update_status/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${job.id}/update_status/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

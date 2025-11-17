@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://workcrop.onrender.com//api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://workcrop.onrender.com/api';
 
 export const api = {
   confirmJob: async (jobData: any) => {

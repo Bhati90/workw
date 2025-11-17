@@ -72,11 +72,11 @@ export function FarmersList() {
   const { data: farmers = [], isLoading } = useQuery({
     queryKey: ["farmers"],
     // queryFn: async (): Promise<Farmer[]> => {
-    //   const response = await fetch("https://workcrop.onrender.com//api/farmers/");
+    //   const response = await fetch("https://workcrop.onrender.com/api/farmers/");
     //   if (!response.ok) throw new Error("Failed to fetch farmers");
     //   return response.json();
     queryFn: async (): Promise<Farmer[]> => {
-  const response = await fetch("https://workcrop.onrender.com//api/farmers/");
+  const response = await fetch("https://workcrop.onrender.com/api/farmers/");
   const data = await response.json();
   return data.results;  // ← FIX
 
@@ -103,7 +103,7 @@ const filteredFarmers = useMemo(() => {
   // Add farmer mutation
   const addFarmerMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("https://workcrop.onrender.com//api/farmers/", {
+      const response = await fetch("https://workcrop.onrender.com/api/farmers/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -125,7 +125,7 @@ const filteredFarmers = useMemo(() => {
   // Update farmer mutation
   const updateFarmerMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string, data: any }) => {
-      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${id}/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${id}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -147,7 +147,7 @@ const filteredFarmers = useMemo(() => {
   // Delete farmer mutation
   const deleteFarmerMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${id}/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${id}/`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete farmer");
@@ -164,7 +164,7 @@ const filteredFarmers = useMemo(() => {
   // Add plot mutation
   const addPlotMutation = useMutation({
     mutationFn: async ({ farmerId, data }: { farmerId: string, data: any }) => {
-      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${farmerId}/plots/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/plots/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -186,7 +186,7 @@ const filteredFarmers = useMemo(() => {
   // Edit plot mutation
   const editPlotMutation = useMutation({
     mutationFn: async ({ farmerId, plotId, data }: { farmerId: string, plotId: string, data: any }) => {
-      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${farmerId}/plots/${plotId}/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/plots/${plotId}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -206,7 +206,7 @@ const filteredFarmers = useMemo(() => {
   // Delete plot mutation
   const deletePlotMutation = useMutation({
     mutationFn: async ({ farmerId, plotId }: { farmerId: string, plotId: string }) => {
-      const response = await fetch(`https://workcrop.onrender.com//api/farmers/${farmerId}/plots/${plotId}/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/plots/${plotId}/`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete plot");

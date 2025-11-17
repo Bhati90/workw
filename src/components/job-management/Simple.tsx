@@ -132,7 +132,7 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ["simple-jobs"],
     queryFn: async (): Promise<SimpleJob[]> => {
-      const response = await fetch("https://workcrop.onrender.com//api/jobs/simple_list/");
+      const response = await fetch("https://workcrop.onrender.com/api/jobs/simple_list/");
       if (!response.ok) throw new Error("Failed to fetch jobs");
       return response.json();
     },
@@ -143,7 +143,7 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
   const { data: mukadams = [] } = useQuery({
   queryKey: ["mukadams-detailed"],
   queryFn: async (): Promise<Mukadam[]> => {
-    const response = await fetch("https://workcrop.onrender.com//api/mukadams/?detailed=true");
+    const response = await fetch("https://workcrop.onrender.com/api/mukadams/?detailed=true");
     if (!response.ok) throw new Error("Failed to fetch mukadams");
     const data = await response.json();
     return (data.results || data).filter((m: Mukadam) => m.is_active);
@@ -236,7 +236,7 @@ const toggleAllMukadams = () => {
 
     const notifyMukadamsMutation = useMutation({
   mutationFn: async ({ jobId, mukadamIds }: { jobId: string, mukadamIds: string[] }) => {
-    const response = await fetch(`https://workcrop.onrender.com//api/jobs/${jobId}/notify_mukadams/`, {
+    const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/notify_mukadams/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mukadam_ids: mukadamIds }),
@@ -264,7 +264,7 @@ const toggleAllMukadams = () => {
   // Assign job mutation
   const assignJobMutation = useMutation({
     mutationFn: async ({ jobId, mukadamId }: { jobId: string, mukadamId: string }) => {
-      const response = await fetch(`https://workcrop.onrender.com//api/jobs/${jobId}/assign_final/`, {
+      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/assign_final/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mukadam_id: mukadamId }),
