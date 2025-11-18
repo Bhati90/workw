@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient,useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,27 @@ import { Users } from "lucide-react";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+
+interface Crop {
+  id: string;
+  name: string;
+}
+
+interface CropVariety {
+  id: string;
+  crop: string;
+  name: string;
+}
+
+interface Activity {
+  id: string;
+  name: string;
+  description: string;
+  days_after_pruning: number;
+}
+
 
 interface JobAddingDialogProps {
   open: boolean;
@@ -41,11 +62,17 @@ export function JobAddingDialog({
   const [notes, setNotes] = useState("");
   const [workersNeeded, setWorkersNeeded] = useState("5");
   
+
+  const [selectedCrop, setSelectedCrop] = useState("");
+const [selectedVariety, setSelectedVariety] = useState("");
+const [selectedActivity, setSelectedActivity] = useState("");
+
+
   const queryClient = useQueryClient();
 
   const confirmJobMutation = useMutation({
     mutationFn: async (jobData: any) => {
-      const response = await fetch("https://workcrop.onrender.com/api/jobs/confirm_job/", {
+      const response = await fetch("http://127.0.0.1:8000/api/jobs/confirm_job/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -71,6 +98,45 @@ export function JobAddingDialog({
       toast.error("Failed to confirm job: " + error.message);
     },
   });
+
+
+
+  // Fetch crops
+const { data: crops = [] } = useQuery({
+  queryKey: ["crops"],
+  queryFn: async (): Promise<Crop[]> => {
+    const response = await fetch("http://127.0.0.1:8000/api/crops/");
+    if (!response.ok) throw new Error("Failed to fetch crops");
+    const data = await response.json();
+    return data.results || data;
+  },
+});
+
+// Fetch varieties (filtered by selected crop)
+const { data: varieties = [] } = useQuery({
+  queryKey: ["varieties", selectedCrop],
+  queryFn: async (): Promise<CropVariety[]> => {
+    if (!selectedCrop) return [];
+    const response = await fetch(`http://127.0.0.1:8000/api/crop-varieties/?crop=${selectedCrop}`);
+    const data = await response.json();
+    return data.results || data;
+  },
+  enabled: !!selectedCrop,
+});
+
+// Fetch activities (filtered by crop)
+const { data: activities = [] } = useQuery({
+  queryKey: ["activities", selectedCrop],
+  queryFn: async (): Promise<Activity[]> => {
+    let url = "http://127.0.0.1:8000/api/activities/";
+    if (selectedCrop) url += `?crop=${selectedCrop}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    return data.results || data;
+  },
+});
+
+
 
   const resetForm = () => {
     setFarmerName("");
@@ -104,35 +170,37 @@ export function JobAddingDialog({
   };
 
   const handleSubmit = () => {
-    if ( !farmSize || !requestedDate || !pricePerAcre || !workersNeeded) {
-      toast.error("Please fill all required fields");
-      return;
-    }
+  if (!selectedCrop || !selectedActivity || !farmSize || !requestedDate || !pricePerAcre || !workersNeeded) {
+    toast.error("Please fill all required fields");
+    return;
+  }
 
-    // ✅ Fix: Map to correct API field names
-    const jobData = {
-      farmer_name: farmerName,
-      phone_number: farmerPhone,  // ✅ Changed from farmer_phone
-      farmer_village: farmerVillage || location,
-      activity_briefs: [  // ✅ Wrap activity in array
-        {
-          activity_name: activityName,
-          acres: parseFloat(farmSize),
-          date_needed: format(requestedDate, "yyyy-MM-dd")
-        }
-      ],
-      location: location || farmerVillage,
-      requested_date: format(requestedDate, "yyyy-MM-dd"),
-      requested_time: requestedTime,
-      workers_needed: parseInt(workersNeeded),  // ✅ Changed from workersNeeded
-      farmer_price_per_acre: parseFloat(pricePerAcre),
-      notes: notes,
-    };
-
-    console.log("Sending job data:", jobData);
-    confirmJobMutation.mutate(jobData);
+  const jobData = {
+    farmer_name: farmerName,
+    phone_number: farmerPhone,
+    farmer_village: farmerVillage || location,
+    crop_id: selectedCrop,  // ✅ ADD
+    crop_variety_id: selectedVariety || null,  // ✅ ADD
+    activity_briefs: [
+      {
+        activity_id: selectedActivity,  // ✅ CHANGE to activity_id
+        acres: parseFloat(farmSize),
+        date_needed: format(requestedDate, "yyyy-MM-dd")
+      }
+    ],
+    location: location || farmerVillage,
+    requested_date: format(requestedDate, "yyyy-MM-dd"),
+    requested_time: requestedTime,
+    workers_needed: parseInt(workersNeeded),
+    farmer_price_per_acre: parseFloat(pricePerAcre),
+    notes: notes,
   };
+console.log("Sending job data:", jobData);
+    
+  confirmJobMutation.mutate(jobData);
+};
 
+    
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -169,6 +237,72 @@ export function JobAddingDialog({
               placeholder="Enter village name"
             />
           </div>
+
+          {/* Crop Selection */}
+<div className="space-y-2">
+  <Label>Crop *</Label>
+  <Select 
+    value={selectedCrop} 
+    onValueChange={(value) => {
+      setSelectedCrop(value);
+      setSelectedVariety("");  // Reset variety when crop changes
+      setSelectedActivity("");  // Reset activity when crop changes
+    }}
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Select crop type" />
+    </SelectTrigger>
+    <SelectContent>
+      {crops.map((crop) => (
+        <SelectItem key={crop.id} value={crop.id}>
+          {crop.name}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
+
+{/* Variety Selection (Optional) */}
+<div className="space-y-2">
+  <Label>Crop Variety (Optional)</Label>
+  <Select 
+    value={selectedVariety} 
+    onValueChange={setSelectedVariety}
+    disabled={!selectedCrop}
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Select variety" />
+    </SelectTrigger>
+    <SelectContent>
+      {varieties.map((variety) => (
+        <SelectItem key={variety.id} value={variety.id}>
+          {variety.name}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
+
+{/* Activity Selection - REPLACE the text input with dropdown */}
+<div className="space-y-2">
+  <Label>Activity Type *</Label>
+  <Select 
+    value={selectedActivity} 
+    onValueChange={setSelectedActivity}
+    disabled={!selectedCrop}
+  >
+    <SelectTrigger>
+      <SelectValue placeholder="Select activity" />
+    </SelectTrigger>
+    <SelectContent>
+      {activities.map((activity) => (
+        <SelectItem key={activity.id} value={activity.id}>
+          {activity.name} ({activity.days_after_pruning} days after pruning)
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
 
           {/* Job Details */}
           <div className="grid grid-cols-2 gap-4">

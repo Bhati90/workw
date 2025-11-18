@@ -16,6 +16,12 @@ import { JobManagementDashboard } from "./components/job-management/JobManagemen
 import { SimpleJobList } from "./components/job-management/Simple";
 import { FarmerProfile } from "./components/farmers/FarmerProflie";
 import { FarmersList } from "./components/farmers/FarmerList";
+import { CalendarAvailability } from "./pages/Calendar";
+import LabourTeamsDjango from "./pages/LabourTeams";
+
+import { MukadamAvailabilityDialog } from "./components/MukadamAvail";
+import MukkadamForm from "./pages/Form";
+import { AutoPriceDialog } from "./components/job-management/AddPrice";
 
 const queryClient = new QueryClient();
 
@@ -57,27 +63,35 @@ const App = () => (
               <SimpleJobList />
             }
           />
+
+          <Route path="/form"
+            element={
+              <MukkadamForm />
+            }
+          />
+
+          
          
 <Route path="/farmers" element={<FarmersList />} />
 <Route path="/farmers/:farmerId" element={<FarmerProfileWrapper />} />
 
-           {/*
           <Route
             path="/labour-teams"
             element={
-              <ProtectedRoute>
-                <LabourTeams />
-              </ProtectedRoute>
+              
+                <LabourTeamsDjango />
+              
             }
           />
+           
           <Route
             path="/calendar"
             element={
-              <ProtectedRoute>
-                <CalendarPage />
-              </ProtectedRoute>
+              
+                <CalendarAvailability />
+              
             }
-          />
+          />{/*
           <Route
             path="/bookings"
             element={

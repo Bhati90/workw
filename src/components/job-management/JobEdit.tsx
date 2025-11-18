@@ -1,7 +1,7 @@
 import { useState } from "react";
 import React from "react";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient,useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,32 @@ import {
   FileText,
   IndianRupee
 } from "lucide-react";
+
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+interface Crop {
+  id: string;
+  name: string;
+}
+
+interface CropVariety {
+  id: string;
+  crop: string;
+  name: string;
+}
+
+interface Activity {
+  id: string;
+  name: string;
+  description: string;
+  days_after_pruning: number;
+}
+
 
 interface JobEditDialogProps {
   job: any;
@@ -48,8 +71,16 @@ export function JobEditDialog({ job, open, onOpenChange }: JobEditDialogProps) {
     farmer_price_per_acre: job?.farmer_price_per_acre || "",
     your_price_per_acre: job?.your_price_per_acre || "",
     workers_needed: job?.workers_needed || "",
-    notes: job?.notes || ""
+    notes: job?.notes || "",
+    crop: job?.crop || "",
+    crop_variety: job?.crop_variety || ""
   });
+
+  
+
+  const [selectedCrop, setSelectedCrop] = useState("");
+const [selectedVariety, setSelectedVariety] = useState("");
+const [selectedActivity, setSelectedActivity] = useState("");
 
   const [editReason, setEditReason] = useState("");
   const [editHistory, setEditHistory] = useState<EditHistory[]>([]);
@@ -58,16 +89,54 @@ export function JobEditDialog({ job, open, onOpenChange }: JobEditDialogProps) {
 
   // Fetch edit history
   const fetchEditHistory = async (jobId: string) => {
-    const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/edit_history/`);
+    const response = await fetch(`http://127.0.0.1:8000/api/jobs/${jobId}/edit_history/`);
     if (!response.ok) throw new Error("Failed to fetch history");
     const data = await response.json();
     setEditHistory(data);
   };
 
+
+    // Fetch crops
+  const { data: crops = [] } = useQuery({
+    queryKey: ["crops"],
+    queryFn: async (): Promise<Crop[]> => {
+      const response = await fetch("http://127.0.0.1:8000/api/crops/");
+      if (!response.ok) throw new Error("Failed to fetch crops");
+      const data = await response.json();
+      return data.results || data;
+    },
+  });
+  
+  // Fetch varieties (filtered by selected crop)
+  const { data: varieties = [] } = useQuery({
+    queryKey: ["varieties", selectedCrop],
+    queryFn: async (): Promise<CropVariety[]> => {
+      if (!selectedCrop) return [];
+      const response = await fetch(`http://127.0.0.1:8000/api/crop-varieties/?crop=${selectedCrop}`);
+      const data = await response.json();
+      return data.results || data;
+    },
+    enabled: !!selectedCrop,
+  });
+  
+  // Fetch activities (filtered by crop)
+  const { data: activities = [] } = useQuery({
+    queryKey: ["activities", selectedCrop],
+    queryFn: async (): Promise<Activity[]> => {
+      let url = "http://127.0.0.1:8000/api/activities/";
+      if (selectedCrop) url += `?crop=${selectedCrop}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      return data.results || data;
+    },
+  });
+  
+  
+
   // Update job mutation
   const updateJobMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${job.id}/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${job.id}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -136,21 +205,22 @@ export function JobEditDialog({ job, open, onOpenChange }: JobEditDialogProps) {
 
   // Load edit history when dialog opens
   React.useEffect(() => {
-    if (open && job?.id) {
-      fetchEditHistory(job.id);
-      // Reset form with current job data
-      setJobData({
-        farm_size_acres: job.farm_size_acres || "",
-        location: job.location || "",
-        requested_date: job.requested_date ? new Date(job.requested_date) : undefined,
-        requested_time: job.requested_time || "07:00",
-        farmer_price_per_acre: job.farmer_price_per_acre || "",
-        your_price_per_acre: job.your_price_per_acre || "",
-        workers_needed: job.workers_needed || "",
-        notes: job.notes || ""
-      });
-    }
-  }, [open, job]);
+  if (open && job?.id) {
+    setJobData({
+      farm_size_acres: job.farm_size_acres || "",
+      location: job.location || "",
+      requested_date: job.requested_date ? new Date(job.requested_date) : undefined,
+      requested_time: job.requested_time || "07:00",
+      farmer_price_per_acre: job.farmer_price_per_acre || "",
+      your_price_per_acre: job.your_price_per_acre || "",
+      workers_needed: job.workers_needed || "",
+      notes: job.notes || "",
+      crop: job.crop || "",
+      crop_variety: job.crop_variety || ""
+    });
+  }
+}, [open, job]);
+
 
   if (!job) return null;
 
@@ -192,7 +262,51 @@ export function JobEditDialog({ job, open, onOpenChange }: JobEditDialogProps) {
                 </div>
               </div>
             </div>
+{/* Add after farm size, before location */}
+<div className="grid grid-cols-2 gap-4">
+  <div className="space-y-2">
+    <Label>Crop</Label>
+    <Select 
+      value={jobData.crop || ""} 
+      onValueChange={(value) => setJobData({ 
+        ...jobData, 
+        crop: value,
+        crop_variety: ""  // Reset variety when crop changes
+      })}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Select crop" />
+      </SelectTrigger>
+      <SelectContent>
+        {crops.map((crop) => (
+          <SelectItem key={crop.id} value={crop.id}>
+            {crop.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
 
+  <div className="space-y-2">
+    <Label>Variety (Optional)</Label>
+    <Select 
+      value={jobData.crop_variety || ""} 
+      onValueChange={(value) => setJobData({ ...jobData, crop_variety: value })}
+      disabled={!jobData.crop}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Select variety" />
+      </SelectTrigger>
+      <SelectContent>
+        {varieties.map((variety) => (
+          <SelectItem key={variety.id} value={variety.id}>
+            {variety.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+</div>
             <div className="space-y-2">
               <Label>Location *</Label>
               <Input

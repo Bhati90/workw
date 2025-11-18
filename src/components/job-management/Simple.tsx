@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
   UserCheck, 
   Users,
   MapPin,
+  Leaf,
   Calendar,
   IndianRupee,
   Search,
@@ -35,10 +36,18 @@ import {
 import { JobConfirmationDialog } from "./JobConfirmationDialog";
 import { Layout } from "../Layout";
 import{ JobAddingDialog } from "./JobAdding";
+import { GroupedJobCard } from "./GroupedJob";
 
+
+import { AutoPriceDialog } from "./AddPrice";
 import { JobEditDialog } from "./JobEdit";
-
-
+interface FarmerJobGroup {
+  farmerPhone: string;
+  farmerName: string;
+  farmerVillage: string;
+  jobs: SimpleJob[];
+}
+  
 interface SimpleJob {
   id: string;
   farmer: {
@@ -49,6 +58,9 @@ interface SimpleJob {
   activity: {
     name: string;
   };
+  // Optional crop fields added to match usage in the component
+  crop?: string;
+  crop_variety?: string;
   farm_size_acres: number;
   workers_needed?: number;
   location: string;
@@ -81,6 +93,7 @@ interface SimpleJob {
   }>;
 }
 
+
 interface ActivityRate {
   id: string;
   activity: string;
@@ -102,6 +115,21 @@ interface Mukadam {
   completed_jobs?: number;
   won_bids?: number;
   avg_bid_price?: number;
+  recommendation?: {  // ✅ ADD THIS
+    score: number;
+    reasons: string[];
+    flags: string[];
+    is_available: boolean;
+    is_recommended: boolean;
+    recommendation_level: string;
+    rate: number;
+    rate_comparison: string;
+    cost_estimate: {
+      rate_per_acre: number;
+      total_cost: number;
+      your_margin: number;
+    };
+  };
 }
 
 export function SimpleJobList() {
@@ -113,10 +141,13 @@ export function SimpleJobList() {
   const [currentJobId, setCurrentJobId] = useState<string>("");
   const [showMukadamDialogBig, setShowMukadamDialogBig] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
-const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
+  const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
+  
 
 
- const navigate = useNavigate();
+  const [bulkNotifyJobIds, setBulkNotifyJobIds] = useState<string[]>([]);
+  const navigate = useNavigate();
+  
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -132,24 +163,106 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ["simple-jobs"],
     queryFn: async (): Promise<SimpleJob[]> => {
-      const response = await fetch("https://workcrop.onrender.com/api/jobs/simple_list/");
+      const response = await fetch("http://127.0.0.1:8000/api/jobs/simple_list/");
       if (!response.ok) throw new Error("Failed to fetch jobs");
       return response.json();
     },
     refetchInterval: 5000,
   });
 
-  // Fetch mukadams for notification
-  const { data: mukadams = [] } = useQuery({
-  queryKey: ["mukadams-detailed"],
+  // In SimpleJobList.tsx - Update the mukadam fetching query
+
+const { data: mukadams = [] } = useQuery({
+  queryKey: ["mukadams-for-job", currentJobId],
   queryFn: async (): Promise<Mukadam[]> => {
-    const response = await fetch("https://workcrop.onrender.com/api/mukadams/?detailed=true");
+    // ✅ Pass job_id to get recommendations
+    const url = currentJobId 
+      ? `http://127.0.0.1:8000/api/mukadams/?detailed=true&job_id=${currentJobId}`
+      : "http://127.0.0.1:8000/api/mukadams/?detailed=true";
+    
+    const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to fetch mukadams");
     const data = await response.json();
     return (data.results || data).filter((m: Mukadam) => m.is_active);
   },
-  enabled: showMukadamDialog,
+  enabled: showMukadamDialog && !!currentJobId,
 });
+
+// Get the current job details
+const currentJob = jobs.find(j => j.id === currentJobId);
+
+  // ✅ MOVE ALL MUTATIONS HERE (BEFORE ANY CONDITIONAL RETURNS)
+  const notifyMukadamsMutation = useMutation({
+    mutationFn: async ({ jobId, mukadamIds }: { jobId: string, mukadamIds: string[] }) => {
+      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${jobId}/notify_mukadams/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mukadam_ids: mukadamIds }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to notify mukadams");
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const count = data.notified?.length || data.push_notifications_sent || 0;
+      toast.success(`Notified ${count} mukadams! Push sent: ${data.push_notifications_sent || 0}`);
+      queryClient.invalidateQueries({ queryKey: ["simple-jobs"] });
+      setShowMukadamDialog(false);
+      setSelectedMukadams([]);
+    },
+    onError: (error) => {
+      toast.error("Failed to notify mukadams: " + error.message);
+    },
+  });
+
+  const assignJobMutation = useMutation({
+    mutationFn: async ({ jobId, mukadamId }: { jobId: string, mukadamId: string }) => {
+      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${jobId}/assign_final/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mukadam_id: mukadamId }),
+      });
+      if (!response.ok) throw new Error("Failed to assign job");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast.success(`Job assigned to ${data.mukadam}!`);
+      queryClient.invalidateQueries({ queryKey: ["simple-jobs"] });
+    },
+    onError: (error) => {
+      toast.error("Failed to assign job: " + error.message);
+    },
+  });
+
+  // ✅ MOVE bulkAssignMutation HERE
+  const bulkAssignMutation = useMutation({
+    mutationFn: async ({ jobIds, mukadamId }: { jobIds: string[], mukadamId: string }) => {
+      const response = await fetch(`http://127.0.0.1:8000/api/jobs/bulk_assign/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_ids: jobIds, mukadam_id: mukadamId }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to assign jobs");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast.success(`${data.summary.successfully_assigned} job(s) assigned successfully!`);
+      if (data.failed_jobs.length > 0) {
+        toast.warning(`${data.failed_jobs.length} job(s) could not be assigned`);
+      }
+      queryClient.invalidateQueries({ queryKey: ["simple-jobs"] });
+    },
+    onError: (error) => {
+      toast.error("Bulk assignment failed: " + error.message);
+    },
+  });
 
   // Extract unique values for filters
   const uniqueLocations = useMemo(() => {
@@ -172,43 +285,25 @@ const [editingJob, setEditingJob] = useState<SimpleJob | null>(null);
     return Array.from(mukadamSet).sort();
   }, [jobs]);
 
-
   const allMukadamsSelected = mukadams.length > 0 && selectedMukadams.length === mukadams.length;
-
-// Add this helper function to toggle all mukadams
-const toggleAllMukadams = () => {
-  if (allMukadamsSelected) {
-    setSelectedMukadams([]);
-  } else {
-    setSelectedMukadams(mukadams.map(m => m.id));
-  }
-};
 
   // Filter and search jobs
   const filteredJobs = useMemo(() => {
     return jobs.filter(job => {
-      // Search term filter (searches farmer name, activity, location, mukadam name)
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = 
         job.farmer.name.toLowerCase().includes(searchLower) ||
         job.activity.name.toLowerCase().includes(searchLower) ||
         job.location.toLowerCase().includes(searchLower) ||
         (job.assigned_mukadam?.name.toLowerCase().includes(searchLower) || false);
-
-      // Status filter
-      const matchesStatus = filterStatus === "all" || job.status === filterStatus;
-
-      // Location filter
+       
+       
+       
+   const matchesStatus = filterStatus === "all" || job.status === filterStatus;
       const matchesLocation = filterLocation === "all" || job.location === filterLocation;
-
-      // Activity filter
       const matchesActivity = filterActivity === "all" || job.activity.name === filterActivity;
-
-      // Date filter
       const matchesDate = !filterDate || 
         new Date(job.requested_date).toISOString().split('T')[0] === filterDate;
-
-      // Mukadam filter
       const matchesMukadam = filterMukadam === "all" || 
         (filterMukadam === "unassigned" && !job.assigned_mukadam) ||
         (job.assigned_mukadam?.name === filterMukadam);
@@ -218,7 +313,35 @@ const toggleAllMukadams = () => {
     });
   }, [jobs, searchTerm, filterStatus, filterLocation, filterActivity, filterDate, filterMukadam]);
 
-  // Clear all filters
+  // Group jobs by farmer (phone number)
+  const groupedJobs = useMemo<FarmerJobGroup[]>(() => {
+    const grouped = new Map<string, SimpleJob[]>();
+    
+    filteredJobs.forEach(job => {
+      const key = `${job.farmer.phone}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key)!.push(job);
+    });
+    
+    return Array.from(grouped.entries()).map(([phone, jobs]) => ({
+      farmerPhone: phone,
+      farmerName: jobs[0].farmer.name,
+      farmerVillage: jobs[0].farmer.village,
+      jobs: jobs
+    }));
+  }, [filteredJobs]);
+
+  // Helper functions
+  const toggleAllMukadams = () => {
+    if (allMukadamsSelected) {
+      setSelectedMukadams([]);
+    } else {
+      setSelectedMukadams(mukadams.map(m => m.id));
+    }
+  };
+
   const clearFilters = () => {
     setSearchTerm("");
     setFilterStatus("all");
@@ -228,80 +351,31 @@ const toggleAllMukadams = () => {
     setFilterMukadam("all");
   };
 
-  // Check if any filters are active
   const hasActiveFilters = searchTerm || filterStatus !== "all" || 
     filterLocation !== "all" || filterActivity !== "all" || 
     filterDate || filterMukadam !== "all";
-
-
-    const notifyMukadamsMutation = useMutation({
-  mutationFn: async ({ jobId, mukadamIds }: { jobId: string, mukadamIds: string[] }) => {
-    const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/notify_mukadams/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mukadam_ids: mukadamIds }),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || "Failed to notify mukadams");
-    }
-
-    return response.json();
-  },
-  onSuccess: (data) => {
-    // ✅ FIX: Handle both old and new response format
-    const count = data.notified?.length || data.push_notifications_sent || 0;
-    toast.success(`Notified ${count} mukadams! Push sent: ${data.push_notifications_sent || 0}`);
-    queryClient.invalidateQueries({ queryKey: ["simple-jobs"] });
-    setShowMukadamDialog(false);
-    setSelectedMukadams([]);
-  },
-  onError: (error) => {
-    toast.error("Failed to notify mukadams: " + error.message);
-  },
-});
-  // Assign job mutation
-  const assignJobMutation = useMutation({
-    mutationFn: async ({ jobId, mukadamId }: { jobId: string, mukadamId: string }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${jobId}/assign_final/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mukadam_id: mukadamId }),
-      });
-      if (!response.ok) throw new Error("Failed to assign job");
-      return response.json();
-    },
-    onSuccess: (data) => {
-      toast.success(`Job assigned to ${data.mukadam}!`);
-      queryClient.invalidateQueries({ queryKey: ["simple-jobs"] });
-    },
-    onError: (error) => {
-      toast.error("Failed to assign job: " + error.message);
-    },
-  });
 
   const handleNotifyMukadams = (jobId: string) => {
     setCurrentJobId(jobId);
     setShowMukadamDialog(true);
   };
 
-  const handleConfirmJob = (job: SimpleJob) => {
-    setSelectedJob(job);
-    setShowConfirmDialog(true);
-  };
+  // const handleConfirmJob = (job: SimpleJob) => {
+  //   setSelectedJob(job);
+  //   setShowConfirmDialog(true);
+  // };
 
-  const handleSendNotifications = () => {
-    if (selectedMukadams.length === 0) {
-      toast.error("Please select at least one mukadam");
-      return;
-    }
+  // const handleSendNotifications = () => {
+  //   if (selectedMukadams.length === 0) {
+  //     toast.error("Please select at least one mukadam");
+  //     return;
+  //   }
 
-    notifyMukadamsMutation.mutate({
-      jobId: currentJobId,
-      mukadamIds: selectedMukadams
-    });
-  };
+  //   notifyMukadamsMutation.mutate({
+  //     jobId: currentJobId,
+  //     mukadamIds: selectedMukadams
+  //   });
+  // };
 
   const handleAssignJob = (jobId: string, mukadamId: string) => {
     assignJobMutation.mutate({ jobId, mukadamId });
@@ -319,9 +393,67 @@ const toggleAllMukadams = () => {
     }
   };
 
+  // ✅ NOW you can have conditional returns AFTER all hooks
   if (isLoading) {
     return <div className="flex justify-center py-8">Loading jobs...</div>;
   }
+
+  const [showAutoPriceDialog, setShowAutoPriceDialog] = useState(false);
+const [autoPriceJob, setAutoPriceJob] = useState<SimpleJob | null>(null);
+
+
+    // ✅ ADD: Handle bulk notify
+  const handleBulkNotify = (jobIds: string[]) => {
+    setBulkNotifyJobIds(jobIds);
+    setCurrentJobId(jobIds[0]); // Set first job as current (for dialog context)
+    setShowMukadamDialog(true);
+  };
+
+  // ✅ UPDATE: Handle send notifications to work with bulk
+  const handleSendNotifications = () => {
+    if (selectedMukadams.length === 0) {
+      toast.error("Please select at least one mukadam");
+      return;
+    }
+
+    // If bulk notify mode (multiple jobs)
+    if (bulkNotifyJobIds.length > 1) {
+      // Notify mukadams for all selected jobs
+      Promise.all(
+        bulkNotifyJobIds.map(jobId =>
+          notifyMukadamsMutation.mutateAsync({
+            jobId,
+            mukadamIds: selectedMukadams
+          })
+        )
+      ).then(() => {
+        toast.success(`Notified mukadams for ${bulkNotifyJobIds.length} jobs!`);
+        setBulkNotifyJobIds([]);
+      }).catch((error) => {
+        toast.error("Some notifications failed: " + error.message);
+      });
+    } else {
+      // Single job notification
+      notifyMukadamsMutation.mutate({
+        jobId: currentJobId,
+        mukadamIds: selectedMukadams
+      });
+    }
+  };
+
+  // ✅ UPDATE: Dialog header to show bulk mode
+  const dialogTitle = bulkNotifyJobIds.length > 1
+    ? `Select Mukadams to Notify (${bulkNotifyJobIds.length} jobs)`
+    : "Select Mukadams to Notify";
+
+
+
+// Update handler
+const handleConfirmJob = (job: SimpleJob) => {
+  setAutoPriceJob(job);
+  setShowAutoPriceDialog(true);
+};
+
 
   return (
     <Layout>
@@ -347,6 +479,11 @@ const toggleAllMukadams = () => {
   <Button variant="outline" className="rounded-lg flex gap-2" onClick={() => navigate('/farmers')}>
     <Users className="h-4 w-4" />
     Farmers
+  </Button>
+
+  <Button variant="outline" className="rounded-lg flex gap-2" onClick={() => navigate('/labour-teams')}>
+    <Users className="h-4 w-4" />
+    availability
   </Button>
 
 </div>
@@ -495,220 +632,251 @@ const toggleAllMukadams = () => {
         </Card>
 
         {/* Job Cards */}
-        <div className="space-y-4">
-          {filteredJobs.map((job) => (
-            <Card key={job.id}>
-             <CardHeader>
-  <div className="flex justify-between items-start w-full">
+<div className="space-y-6">
+          {groupedJobs.map((group) => (
+            group.jobs.length > 1 ? (
+              <GroupedJobCard
+                key={group.farmerPhone}
+                farmerName={group.farmerName}
+                farmerPhone={group.farmerPhone}
+                farmerVillage={group.farmerVillage}
+                jobs={group.jobs}
+                onBulkAssign={(jobIds, mukadamId) => 
+                  bulkAssignMutation.mutate({ jobIds, mukadamId })
+                }
+                isAssigning={bulkAssignMutation.isPending}
+                onSetPrice={handleConfirmJob}
+                onNotifyMukadams={handleNotifyMukadams}
+                onBulkNotify={handleBulkNotify} // ✅ ADD THIS
+                onAssignJob={handleAssignJob}
+              />
+    ) : (
+      // Single job card (your existing card component)
+      (() => {
+        const job = group.jobs[0]; // ✅ Define job from group
+        return (
+          <Card key={job.id}>
+            <CardHeader>
+              <div className="flex justify-between items-start w-full">
+                {/* LEFT SIDE CONTENT */}
+                <div className="flex flex-col gap-1">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    {job.farmer.name} - {job.activity.name}
 
-    {/* LEFT SIDE CONTENT */}
-    <div className="flex flex-col gap-1">
-      <CardTitle className="text-lg flex items-center gap-2">
-        {job.farmer.name} - {job.activity.name}
+                    {job.assigned_mukadam && (
+                      <Badge variant="outline">
+                        Assigned to {job.assigned_mukadam.name}
+                      </Badge>
+                    )}
+                  </CardTitle>
 
-        {job.assigned_mukadam && (
-          <Badge variant="outline">
-            Assigned to {job.assigned_mukadam.name}
-          </Badge>
-        )}
-      </CardTitle>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {job.location}
+                    </span>
 
-      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <MapPin className="h-3 w-3" />
-          {job.location}
-        </span>
+                    {job.crop && (
+                      <span className="flex items-center gap-1">
+                        <Leaf className="h-3 w-3" />
+                        {job.crop}
+                        {job.crop_variety && ` - ${job.crop_variety}`}
+                      </span>
+                    )}
 
-        <span className="flex items-center gap-1">
-          <Calendar className="h-3 w-3" />
-          {new Date(job.requested_date).toLocaleDateString()}
-        </span>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {new Date(job.requested_date).toLocaleDateString()}
+                    </span>
 
-        <span>{job.farm_size_acres} acres</span>
-      </div>
-    </div>
-
-    {/* RIGHT SIDE ACTIONS */}
-    <div className="flex flex-col items-end gap-2">
-
-      {/* Status Badge */}
-      <Badge className={getStatusColor(job.status)}>
-        {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-      </Badge>
-
-      {/* Edit Button */}
-      <Button
-        variant="outline"
-        size="sm"
-        className="flex items-center gap-2"
-        onClick={() => {
-          setEditingJob(job);
-          setShowEditDialog(true);
-        }}
-      >
-        <Edit className="h-4 w-4" />
-        Edit Job
-      </Button>
-    </div>
-  </div>
-</CardHeader>
-
-              <CardContent className="space-y-4">
-                {/* Job Requirements Info */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Farm Size:</span>
-                    <p className="font-semibold">{job.farm_size_acres} acres</p>
+                    <span>{job.farm_size_acres} acres</span>
                   </div>
-                  {job.workers_needed && (
-                    <div>
-                      <span className="text-muted-foreground">Based on Farm Size Workers Needed:</span>
-                      <p className="font-semibold">approx {job.workers_needed}  </p>
-                    </div>
-                  )}
                 </div>
 
-                {/* Team Analysis */}
-                {job.team_analysis && (
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded">
-                    <p className="text-sm text-blue-600">
-                      <strong>Team Requirements:</strong> {job.team_analysis.team_coverage} • 
-                      {job.team_analysis.suitable_mukadams} suitable teams available
+                {/* RIGHT SIDE ACTIONS */}
+                <div className="flex flex-col items-end gap-2">
+                  {/* Status Badge */}
+                  <Badge className={getStatusColor(job.status)}>
+                    {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                  </Badge>
+
+                  {/* Edit Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                    onClick={() => {
+                      setEditingJob(job);
+                      setShowEditDialog(true);
+                    }}
+                  >
+                    <Edit className="h-4 w-4" />
+                    Edit Job
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {/* Job Requirements Info */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Farm Size:</span>
+                  <p className="font-semibold">{job.farm_size_acres} acres</p>
+                </div>
+                {job.workers_needed && (
+                  <div>
+                    <span className="text-muted-foreground">Workers Needed:</span>
+                    <p className="font-semibold">approx {job.workers_needed}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Team Analysis */}
+              {job.team_analysis && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded">
+                  <p className="text-sm text-blue-600">
+                    <strong>Team Requirements:</strong> {job.team_analysis.team_coverage} • 
+                    {job.team_analysis.suitable_mukadams} suitable teams available
+                  </p>
+                </div>
+              )}
+
+              {/* Pricing Info */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Farmer Budget:</span>
+                  <p className="font-semibold">₹{job.farmer_price_per_acre}/acre</p>
+                </div>
+                {job.your_price_per_acre && (
+                  <div>
+                    <span className="text-muted-foreground">Your Price:</span>
+                    <p className="font-semibold text-green-600">₹{job.your_price_per_acre}/acre</p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-muted-foreground">Total (Farmer):</span>
+                  <p className="font-semibold">₹{(job.farmer_price_per_acre * job.farm_size_acres).toLocaleString()}</p>
+                </div>
+                {job.your_price_per_acre && (
+                  <div>
+                    <span className="text-muted-foreground">Your Margin:</span>
+                    <p className="font-semibold text-blue-600">
+                      ₹{((job.farmer_price_per_acre - job.your_price_per_acre) * job.farm_size_acres).toLocaleString()}
                     </p>
                   </div>
                 )}
+              </div>
 
-                {/* Pricing Info */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Farmer Budget:</span>
-                    <p className="font-semibold">₹{job.farmer_price_per_acre}/acre</p>
-                  </div>
-                  {job.your_price_per_acre && (
-                    <div>
-                      <span className="text-muted-foreground">Your Price:</span>
-                      <p className="font-semibold text-green-600">₹{job.your_price_per_acre}/acre</p>
-                    </div>
-                  )}
-                  <div>
-                    <span className="text-muted-foreground">Total (Farmer):</span>
-                    <p className="font-semibold">₹{(job.farmer_price_per_acre * job.farm_size_acres).toLocaleString()}</p>
-                  </div>
-                  {job.your_price_per_acre && (
-                    <div>
-                      <span className="text-muted-foreground">Your Margin:</span>
-                      <p className="font-semibold text-blue-600">
-                        ₹{((job.farmer_price_per_acre - job.your_price_per_acre) * job.farm_size_acres).toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-2">
-                  {job.status === 'confirmed' && (
-                    <Button 
-                      onClick={() => handleConfirmJob(job)}
-                      variant="outline"
-                    >
-                      <IndianRupee className="h-4 w-4 mr-2" />
-                      Set Price
-                    </Button>
-                  )}
-
-                  {job.status === 'priced' && (
-                    <Button onClick={() => handleNotifyMukadams(job.id)}>
-                      <Bell className="h-4 w-4 mr-2" />
-                      Notify Mukadams
-                    </Button>
-                  )}
-                </div>
-
-                {/* Pending Responses */}
-                {job.interests && job.interests.filter(i => i.response_status === 'pending').length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-yellow-600">⏳ Waiting for Response:</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {job.interests.filter(i => i.response_status === 'pending').map((interest) => (
-                        <div key={interest.id} className="text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-950/20 p-2 rounded">
-                          {interest.mukadam.name}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                {job.status === 'confirmed' && (
+                  <Button 
+                    onClick={() => handleConfirmJob(job)}
+                    variant="outline"
+                  >
+                    <IndianRupee className="h-4 w-4 mr-2" />
+                    Set Price
+                  </Button>
                 )}
 
-                {/* Interested Mukadams */}
-                {job.interests && job.interests.filter(i => i.response_status === 'interested').length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-green-600">✅ Interested Mukadams:</h4>
-                    <div className="space-y-2">
-                      {job.interests.filter(i => i.is_interested).map((interest) => (
-                        <div 
-                          key={interest.id} 
-                          className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-950/20 rounded"
-                        >
-                          <div>
-                            <p className="font-semibold">{interest.mukadam.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {interest.mukadam.location} • {interest.mukadam.phone}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Responded: {new Date(interest.responded_at).toLocaleString()}
-                            </p>
-                          </div>
-                          
-                          {job.status === 'notified' && !job.assigned_mukadam && (
-                            <Button 
-                              size="sm"
-                              onClick={() => handleAssignJob(job.id, interest.mukadam.id)}
-                              disabled={assignJobMutation.isPending}
-                            >
-                              <UserCheck className="h-4 w-4 mr-2" />
-                              Assign
-                            </Button>
-                          )}
-
-                          {job.assigned_mukadam?.id === interest.mukadam.id && (
-                            <Badge className="bg-green-500">
-                              ✅ ASSIGNED
-                            </Badge>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {job.status === 'priced' && (
+                  <Button onClick={() => handleNotifyMukadams(job.id)}>
+                    <Bell className="h-4 w-4 mr-2" />
+                    Notify Mukadams
+                  </Button>
                 )}
+              </div>
 
-                {/* Assigned Mukadam */}
-                {job.interests && job.interests.filter(i => i.response_status === 'assigned').length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-blue-600">🎯 Assigned:</h4>
-                    {job.interests.filter(i => i.response_status === 'assigned').map((interest) => (
-                      <div key={interest.id} className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded">
-                        <p className="font-semibold text-blue-700">{interest.mukadam.name}</p>
-                        <p className="text-sm text-blue-600">Job assigned • Contact: {interest.mukadam.phone}</p>
+              {/* Pending Responses */}
+              {job.interests && job.interests.filter(i => i.response_status === 'pending').length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-yellow-600">⏳ Waiting for Response:</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {job.interests.filter(i => i.response_status === 'pending').map((interest) => (
+                      <div key={interest.id} className="text-sm text-yellow-600 bg-yellow-50 dark:bg-yellow-950/20 p-2 rounded">
+                        {interest.mukadam.name}
                       </div>
                     ))}
                   </div>
-                )}
+                </div>
+              )}
 
-                {job.interests && job.interests.filter(i => i.response_status === 'declined').length > 0 && (
-  <div className="space-y-2">
-    <h4 className="font-semibold text-red-600">❌ Not Interested:</h4>
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-      {job.interests.filter(i => i.response_status === 'declined').map((interest) => (
-                        <div key={interest.id} className="text-sm text-red-600 bg-red-50 dark:bg-red-950/20 p-2 rounded">
-                          {interest.mukadam.name}
+              {/* Interested Mukadams */}
+              {job.interests && job.interests.filter(i => i.response_status === 'interested').length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-green-600">✅ Interested Mukadams:</h4>
+                  <div className="space-y-2">
+                    {job.interests.filter(i => i.is_interested).map((interest) => (
+                      <div 
+                        key={interest.id} 
+                        className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-950/20 rounded"
+                      >
+                        <div>
+                          <p className="font-semibold">{interest.mukadam.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {interest.mukadam.location} • {interest.mukadam.phone}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Responded: {new Date(interest.responded_at).toLocaleString()}
+                          </p>
                         </div>
-                      ))}
-                    </div>
+                        
+                        {job.status === 'notified' && !job.assigned_mukadam && (
+                          <Button 
+                            size="sm"
+                            onClick={() => handleAssignJob(job.id, interest.mukadam.id)}
+                            disabled={assignJobMutation.isPending}
+                          >
+                            <UserCheck className="h-4 w-4 mr-2" />
+                            Assign
+                          </Button>
+                        )}
+
+                        {job.assigned_mukadam?.id === interest.mukadam.id && (
+                          <Badge className="bg-green-500">
+                            ✅ ASSIGNED
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </div>
+              )}
+
+              {/* Assigned Mukadam */}
+              {job.interests && job.interests.filter(i => i.response_status === 'assigned').length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-blue-600">🎯 Assigned:</h4>
+                  {job.interests.filter(i => i.response_status === 'assigned').map((interest) => (
+                    <div key={interest.id} className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded">
+                      <p className="font-semibold text-blue-700">{interest.mukadam.name}</p>
+                      <p className="text-sm text-blue-600">Job assigned • Contact: {interest.mukadam.phone}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Declined */}
+              {job.interests && job.interests.filter(i => i.response_status === 'declined').length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-red-600">❌ Not Interested:</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {job.interests.filter(i => i.response_status === 'declined').map((interest) => (
+                      <div key={interest.id} className="text-sm text-red-600 bg-red-50 dark:bg-red-950/20 p-2 rounded">
+                        {interest.mukadam.name}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()
+    )
+  ))}
+</div>
 
         {/* Empty State */}
         {filteredJobs.length === 0 && jobs.length > 0 && (
@@ -732,12 +900,15 @@ const toggleAllMukadams = () => {
         )}
 
         <Dialog open={showMukadamDialog} onOpenChange={setShowMukadamDialog}>
-  <DialogContent className="max-w-3xl max-h-[80vh]">
+  <DialogContent className="max-w-4xl max-h-[85vh]">
     <DialogHeader>
       <DialogTitle>Select Mukadams to Notify</DialogTitle>
-      <p className="text-sm text-muted-foreground">
-        Choose mukadams to notify about this job opportunity
-      </p>
+      {currentJob && (
+        <div className="text-sm text-muted-foreground space-y-1">
+          <p>{currentJob.farmer.name} - {currentJob.activity.name} - {currentJob.farm_size_acres} acres</p>
+          <p>Your Budget: ₹{currentJob.your_price_per_acre}/acre • Date: {new Date(currentJob.requested_date).toLocaleDateString()}</p>
+        </div>
+      )}
     </DialogHeader>
     
     <div className="space-y-4">
@@ -761,108 +932,191 @@ const toggleAllMukadams = () => {
         )}
       </div>
 
-      <ScrollArea className="h-[400px] pr-4">
+      {/* ✅ ADD: Recommendation Summary */}
+      {mukadams.length > 0 && (
+        <div className="grid grid-cols-3 gap-3 p-3 bg-secondary/20 rounded">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">
+              {mukadams.filter(m => m.recommendation?.is_recommended).length}
+            </div>
+            <div className="text-xs text-muted-foreground">Recommended</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600">
+              {mukadams.filter(m => m.recommendation?.is_available).length}
+            </div>
+            <div className="text-xs text-muted-foreground">Available</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-purple-600">
+              {mukadams.filter(m => m.recommendation?.rate && m.recommendation.rate <= (currentJob?.your_price_per_acre || 0)).length}
+            </div>
+            <div className="text-xs text-muted-foreground">Within Budget</div>
+          </div>
+        </div>
+      )}
+
+      <ScrollArea className="h-[450px] pr-4">
         <div className="space-y-3">
-          {mukadams.map((mukadam) => (
-            <div 
-              key={mukadam.id} 
-              className={`
-                flex items-start space-x-3 p-4 border rounded-lg transition-all
-                ${selectedMukadams.includes(mukadam.id) 
-                  ? 'border-primary bg-primary/5' 
-                  : 'border-border hover:border-primary/50'
-                }
-              `}
-            >
-              <Checkbox
-                checked={selectedMukadams.includes(mukadam.id)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    setSelectedMukadams(prev => [...prev, mukadam.id]);
-                  } else {
+          {mukadams.map((mukadam) => {
+            const rec = mukadam.recommendation;
+            const isTopPick = mukadams[0]?.id === mukadam.id && rec?.is_recommended;
+            
+            return (
+              <div 
+                key={mukadam.id} 
+                className={`
+                  flex items-start space-x-3 p-4 border rounded-lg transition-all cursor-pointer
+                  ${selectedMukadams.includes(mukadam.id) 
+                    ? 'border-primary bg-primary/5 shadow-md' 
+                    : 'border-border hover:border-primary/50'
+                  }
+                  ${isTopPick ? 'border-2 border-green-500 bg-green-50 dark:bg-green-950/20' : ''}
+                  ${rec && !rec.is_available ? 'opacity-60' : ''}
+                `}
+                onClick={() => {
+                  if (selectedMukadams.includes(mukadam.id)) {
                     setSelectedMukadams(prev => prev.filter(id => id !== mukadam.id));
+                  } else {
+                    setSelectedMukadams(prev => [...prev, mukadam.id]);
                   }
                 }}
-                className="mt-1"
-              />
-              
-              <div className="flex-1 space-y-2">
-                {/* Mukadam Header */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-base">{mukadam.name}</p>
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        {mukadam.location}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        {mukadam.number_of_labourers} workers
-                      </span>
-                      <span>{mukadam.phone}</span>
+              >
+                <Checkbox
+                  checked={selectedMukadams.includes(mukadam.id)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setSelectedMukadams(prev => [...prev, mukadam.id]);
+                    } else {
+                      setSelectedMukadams(prev => prev.filter(id => id !== mukadam.id));
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-1"
+                />
+                
+                <div className="flex-1 space-y-2">
+                  {/* Mukadam Header */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-semibold">{mukadam.name}</p>
+                        
+                        {/* ✅ Recommendation Badges */}
+                        {isTopPick && (
+                          <Badge className="bg-green-600">
+                            🌟 Top Pick
+                          </Badge>
+                        )}
+                        {rec?.is_recommended && !isTopPick && (
+                          <Badge className="bg-blue-600">
+                            ✅ Recommended
+                          </Badge>
+                        )}
+                        {rec?.is_available && (
+                          <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                            Available
+                          </Badge>
+                        )}
+                        {rec && !rec.is_available && (
+                          <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">
+                            Not Available
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {mukadam.location}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {mukadam.number_of_labourers} workers
+                        </span>
+                        <span>{mukadam.phone}</span>
+                      </div>
+                    </div>
+                    
+                    {/* ✅ Match Score & Price */}
+                    <div className="text-right">
+                      {rec && (
+                        <>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="text-right">
+                              <p className="font-semibold text-green-600">
+                                ₹{rec.rate}/acre
+                              </p>
+                              {rec.cost_estimate && (
+                                <p className="text-xs text-muted-foreground">
+                                  Margin: ₹{rec.cost_estimate.your_margin.toLocaleString()}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Match Score Bar */}
+                          <div className="flex items-center gap-2 mt-2">
+                            <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2 w-20">
+                              <div
+                                className={`h-2 rounded-full transition-all ${
+                                  rec.score >= 70 ? 'bg-green-500' :
+                                  rec.score >= 50 ? 'bg-blue-500' :
+                                  rec.score >= 30 ? 'bg-yellow-500' : 'bg-orange-500'
+                                }`}
+                                style={{ width: `${Math.min(rec.score, 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-medium">{rec.score}%</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
-                  
-                  {/* Stats Badges */}
-                  {(mukadam.total_jobs !== undefined || mukadam.won_bids !== undefined) && (
-                    <div className="flex gap-2">
-                      {mukadam.total_jobs !== undefined && (
-                        <Badge variant="outline" className="text-xs">
-                          {mukadam.total_jobs} jobs
+
+                  {/* ✅ Reasons for Recommendation */}
+                  {rec && rec.reasons.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {rec.reasons.map((reason: string, idx: number) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {reason}
                         </Badge>
-                      )}
-                      {mukadam.won_bids !== undefined && mukadam.won_bids > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          {mukadam.won_bids} won
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ✅ Warning Flags */}
+                  {rec && rec.flags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {rec.flags.map((flag: string, idx: number) => (
+                        <Badge key={idx} variant="outline" className="text-xs text-orange-600 border-orange-300">
+                          ⚠️ {flag}
                         </Badge>
-                      )}
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Activity Rates Summary */}
+                  {!rec && mukadam.activity_rates && mukadam.activity_rates.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      {mukadam.activity_rates.length} activities configured
                     </div>
                   )}
                 </div>
-
-                {/* Activity Rates */}
-                {mukadam.activity_rates && mukadam.activity_rates.length > 0 ? (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Available Activities & Rates:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {mukadam.activity_rates
-                        .filter(rate => rate.is_available)
-                        .map((rate) => (
-                          <div 
-                            key={rate.id}
-                            className="flex items-center gap-1.5 px-2 py-1 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded text-xs"
-                          >
-                            <span className="font-medium text-green-700 dark:text-green-400">
-                              {rate.activity_name}
-                            </span>
-                            <span className="text-green-600 dark:text-green-500">
-                              ₹{rate.rate_per_acre}/acre
-                            </span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground italic">
-                    No activity rates specified
-                  </p>
-                )}
-
-                {/* Average Bid Price */}
-                {/* {mukadam.avg_bid_price && mukadam.avg_bid_price > 0 && (
-                  <p className="text-xs text-blue-600 dark:text-blue-400">
-                    Avg. Bid: ₹{mukadam.avg_bid_price.toLocaleString()}
-                  </p>
-                )} */}
               </div>
+            );
+          })}
+
+          {mukadams.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <Users className="h-12 w-12 mx-auto mb-2" />
+              <p>No mukadams found matching criteria</p>
             </div>
-          ))}
+          )}
         </div>
       </ScrollArea>
-      
-      {/* Action Buttons */}
-      <div className="flex gap-3 pt-4 border-t">
+    
+      <DialogFooter className="flex justify-end gap-2 pt-4">
         <Button 
           variant="outline" 
           onClick={() => {
@@ -883,7 +1137,7 @@ const toggleAllMukadams = () => {
             : `Notify ${selectedMukadams.length} Mukadam${selectedMukadams.length !== 1 ? 's' : ''}`
           }
         </Button>
-      </div>
+      </DialogFooter>
     </div>
   </DialogContent>
 </Dialog>
@@ -904,16 +1158,24 @@ const toggleAllMukadams = () => {
             }
           }}
         />
+        <JobEditDialog
+          job={editingJob}
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+        />
         <JobAddingDialog 
           open={showConfirmDialogAdd}
           onOpenChange={setShowConfirmDialogAdd}
         />
 
-        <JobEditDialog
-  job={editingJob}
-  open={showEditDialog}
-  onOpenChange={setShowEditDialog}
+        <AutoPriceDialog
+  job={autoPriceJob}
+  open={showAutoPriceDialog}
+  onOpenChange={setShowAutoPriceDialog}
+  onPriced={() => queryClient.invalidateQueries({ queryKey: ["simple-jobs"] })}
 />
+
+        
       </div>
     </Layout>
   );

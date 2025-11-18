@@ -38,7 +38,7 @@ export function BidComparisonPanel({ job, bids, onStatusUpdate }: BidComparisonP
 
   const finalizeBidMutation = useMutation({
     mutationFn: async ({ bidId, finalPrice }: { bidId: string, finalPrice: number }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/jobs/${job.id}/finalize_mukadam/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/jobs/${job.id}/finalize_mukadam/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

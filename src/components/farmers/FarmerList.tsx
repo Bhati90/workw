@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Plus, 
+  Plus,
+ 
   Edit, 
   Trash2, 
   MapPin, 
@@ -16,20 +18,57 @@ import {
   Calendar,
   Search,
   Download,
-  User
+  User,
+  Leaf,
+  Sprout
 } from "lucide-react";
+
 import { toast } from "sonner";
 import { Layout } from "../Layout";
 import { format } from "date-fns";
 
 
+// ✅ ADD these new interfaces
+interface Crop {
+  id: string;
+  name: string;
+  description: string;
+}
 
+interface CropVariety {
+  id: string;
+  crop: string;
+  crop_name: string;
+  name: string;
+}
+
+interface Activity {
+  id: string;
+  name: string;
+  description: string;
+  days_after_pruning: number;
+  crop?: string;
+}
+
+// ✅ UPDATE Plot interface
 interface Plot {
   id: string;
   acres: number;
   location?: string;
+  crop?: string;  // ✅ ADD
+  crop_name?: string;  // ✅ ADD
+  crop_variety?: string;  // ✅ ADD
+  crop_variety_name?: string;  // ✅ ADD
+  activity?: string;  // ✅ ADD (activity ID)
   activity_name?: string;
   pruning_date: string;
+  calculated_activity_date?: string;  // ✅ ADD
+  days_until_activity?: number;  // ✅ ADD
+  activity_details?: {  // ✅ ADD
+    id: string;
+    name: string;
+    days_after_pruning: number;
+  };
 }
 
 interface Farmer {
@@ -61,7 +100,9 @@ export function FarmersList() {
   const [plotData, setPlotData] = useState({
     acres: "",
     location: "",
-    activity_name: "",
+    crop: "",
+    crop_variety: "",
+    activity: "",
     pruning_date: ""
   });
 
@@ -72,11 +113,11 @@ export function FarmersList() {
   const { data: farmers = [], isLoading } = useQuery({
     queryKey: ["farmers"],
     // queryFn: async (): Promise<Farmer[]> => {
-    //   const response = await fetch("https://workcrop.onrender.com/api/farmers/");
+    //   const response = await fetch("http://127.0.0.1:8000/api/farmers/");
     //   if (!response.ok) throw new Error("Failed to fetch farmers");
     //   return response.json();
     queryFn: async (): Promise<Farmer[]> => {
-  const response = await fetch("https://workcrop.onrender.com/api/farmers/");
+  const response = await fetch("http://127.0.0.1:8000/api/farmers/");
   const data = await response.json();
   return data.results;  // ← FIX
 
@@ -86,6 +127,45 @@ export function FarmersList() {
     ,
   });
 
+
+  // ✅ ADD: Fetch crops
+const { data: crops = [] } = useQuery({
+  queryKey: ["crops"],
+  queryFn: async (): Promise<Crop[]> => {
+    const response = await fetch("http://127.0.0.1:8000/api/crops/");
+    if (!response.ok) throw new Error("Failed to fetch crops");
+    const data = await response.json();
+    return data.results || data;
+  },
+});
+
+// ✅ ADD: Fetch crop varieties (filtered by selected crop)
+const { data: cropVarieties = [] } = useQuery({
+  queryKey: ["crop-varieties", plotData.crop],
+  queryFn: async (): Promise<CropVariety[]> => {
+    if (!plotData.crop) return [];
+    const response = await fetch(`http://127.0.0.1:8000/api/crop-varieties/?crop=${plotData.crop}`);
+    if (!response.ok) throw new Error("Failed to fetch varieties");
+    const data = await response.json();
+    return data.results || data;
+  },
+  enabled: !!plotData.crop,
+});
+
+// ✅ ADD: Fetch activities (filtered by crop)
+const { data: activities = [] } = useQuery({
+  queryKey: ["activities", plotData.crop],
+  queryFn: async (): Promise<Activity[]> => {
+    let url = "http://127.0.0.1:8000/api/activities/";
+    if (plotData.crop) {
+      url += `?crop=${plotData.crop}`;
+    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to fetch activities");
+    const data = await response.json();
+    return data.results || data;
+  },
+});
 
 
   // Filter farmers based on search
@@ -103,7 +183,7 @@ const filteredFarmers = useMemo(() => {
   // Add farmer mutation
   const addFarmerMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("https://workcrop.onrender.com/api/farmers/", {
+      const response = await fetch("http://127.0.0.1:8000/api/farmers/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -125,7 +205,7 @@ const filteredFarmers = useMemo(() => {
   // Update farmer mutation
   const updateFarmerMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string, data: any }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${id}/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/farmers/${id}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -147,7 +227,7 @@ const filteredFarmers = useMemo(() => {
   // Delete farmer mutation
   const deleteFarmerMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${id}/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/farmers/${id}/`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete farmer");
@@ -164,7 +244,7 @@ const filteredFarmers = useMemo(() => {
   // Add plot mutation
   const addPlotMutation = useMutation({
     mutationFn: async ({ farmerId, data }: { farmerId: string, data: any }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/plots/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/farmers/${farmerId}/plots/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -186,7 +266,7 @@ const filteredFarmers = useMemo(() => {
   // Edit plot mutation
   const editPlotMutation = useMutation({
     mutationFn: async ({ farmerId, plotId, data }: { farmerId: string, plotId: string, data: any }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/plots/${plotId}/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/farmers/${farmerId}/plots/${plotId}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -206,7 +286,7 @@ const filteredFarmers = useMemo(() => {
   // Delete plot mutation
   const deletePlotMutation = useMutation({
     mutationFn: async ({ farmerId, plotId }: { farmerId: string, plotId: string }) => {
-      const response = await fetch(`https://workcrop.onrender.com/api/farmers/${farmerId}/plots/${plotId}/`, {
+      const response = await fetch(`http://127.0.0.1:8000/api/farmers/${farmerId}/plots/${plotId}/`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to delete plot");
@@ -222,7 +302,7 @@ const filteredFarmers = useMemo(() => {
   };
 
   const resetPlotForm = () => {
-    setPlotData({ acres: "", location: "", activity_name: "", pruning_date: "" });
+    setPlotData({ acres: "", location: "", activity: "", pruning_date: "" , crop: "", crop_variety: ""});
   };
 
   const handleEditFarmer = (farmer: Farmer) => {
@@ -241,16 +321,18 @@ const filteredFarmers = useMemo(() => {
   };
 
   const handleEditPlot = (farmerId: string, plot: Plot) => {
-    setCurrentFarmerId(farmerId);
-    setEditingPlot(plot);
-    setPlotData({
-      acres: plot.acres.toString(),
-      location: plot.location || "",
-      activity_name: plot.activity_name || "",
-      pruning_date: plot.pruning_date
-    });
-    setShowEditPlotDialog(true);
-  };
+  setCurrentFarmerId(farmerId);
+  setEditingPlot(plot);
+  setPlotData({
+    acres: plot.acres.toString(),
+    location: plot.location || "",
+    crop: plot.crop || "",  // ✅ ADD
+    crop_variety: plot.crop_variety || "",  // ✅ ADD
+    activity: plot.activity || "",  // ✅ UPDATE
+    pruning_date: plot.pruning_date
+  });
+  setShowEditPlotDialog(true);
+};
 
   const handleSaveFarmer = () => {
     if (!farmerData.name || !farmerData.phone) {
@@ -269,36 +351,40 @@ const filteredFarmers = useMemo(() => {
   };
 
   const handleSavePlot = () => {
-    if (!plotData.acres || !plotData.pruning_date) {
-      toast.error("Acres and pruning date are required");
-      return;
-    }
+  if (!plotData.acres || !plotData.pruning_date || !plotData.crop || !plotData.activity) {  // ✅ ADD crop & activity
+    toast.error("Acres, crop, activity, and pruning date are required");
+    return;
+  }
 
-    addPlotMutation.mutate({
-      farmerId: currentFarmerId,
-      data: {
-        acres: parseFloat(plotData.acres),
-        location: plotData.location,
-        activity_name: plotData.activity_name,
-        pruning_date: plotData.pruning_date
-      }
-    });
-  };
+  addPlotMutation.mutate({
+    farmerId: currentFarmerId,
+    data: {
+      acres: parseFloat(plotData.acres),
+      location: plotData.location,
+      crop: plotData.crop,  // ✅ ADD
+      crop_variety: plotData.crop_variety || null,  // ✅ ADD
+      activity: plotData.activity,  // ✅ UPDATE (send ID, not name)
+      pruning_date: plotData.pruning_date
+    }
+  });
+};
 
   const handleUpdatePlot = () => {
-    if (!editingPlot) return;
+  if (!editingPlot) return;
 
-    editPlotMutation.mutate({
-      farmerId: currentFarmerId,
-      plotId: editingPlot.id,
-      data: {
-        acres: parseFloat(plotData.acres),
-        location: plotData.location,
-        activity_name: plotData.activity_name,
-        pruning_date: plotData.pruning_date
-      }
-    });
-  };
+  editPlotMutation.mutate({
+    farmerId: currentFarmerId,
+    plotId: editingPlot.id,
+    data: {
+      acres: parseFloat(plotData.acres),
+      location: plotData.location,
+      crop: plotData.crop,  // ✅ ADD
+      crop_variety: plotData.crop_variety || null,  // ✅ ADD
+      activity: plotData.activity,  // ✅ UPDATE
+      pruning_date: plotData.pruning_date
+    }
+  });
+};
 
 
 
@@ -488,48 +574,66 @@ const downloadCalendar = (farmer: Farmer) => {
               <CardContent className="space-y-3">
                 {/* Plots */}
                 {farmer.plots.map((plot) => (
-                  <div 
-                    key={plot.id} 
-                    className="p-3 bg-secondary/30 rounded flex justify-between items-center"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-3 w-3" />
-                        <span className="font-semibold">{plot.acres} acres</span>
-                      </div>
-                      {plot.activity_name && (
-                        <div className="text-xs text-muted-foreground">
-                          {plot.activity_name}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        Pruned: {format(new Date(plot.pruning_date), "MMM d, yyyy")}
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditPlot(farmer.id, plot)}
-                      >
-                        <Edit className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          if (confirm("Delete this plot?")) {
-                            deletePlotMutation.mutate({ farmerId: farmer.id, plotId: plot.id });
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+  <div key={plot.id} className="p-3 bg-secondary/30 rounded space-y-2">
+    <div className="flex justify-between items-start">
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-3 w-3" />
+          <span className="font-semibold">{plot.acres} acres</span>
+        </div>
+        
+        {/* ✅ ADD Crop info */}
+        {plot.crop_name && (
+          <div className="flex items-center gap-1 text-xs text-blue-600 mt-1">
+            <Leaf className="h-3 w-3" />
+            {plot.crop_name}
+            {plot.crop_variety_name && ` - ${plot.crop_variety_name}`}
+          </div>
+        )}
+        
+        {/* ✅ UPDATE Activity display */}
+        {plot.activity_details && (
+          <div className="flex items-center gap-1 text-xs font-medium text-green-600 mt-1">
+            <Sprout className="h-3 w-3" />
+            {plot.activity_details.name}
+          </div>
+        )}
+        
+        {plot.location && (
+          <div className="text-xs text-muted-foreground">
+            📍 {plot.location}
+          </div>
+        )}
+      </div>
+      
+      {/* Edit/Delete buttons */}
+    </div>
+
+    {/* ✅ ADD Date info */}
+    <div className="space-y-1 border-t pt-2">
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <Calendar className="h-3 w-3" />
+        <span className="font-medium">Pruned:</span>
+        <span>{format(new Date(plot.pruning_date), "MMM d, yyyy")}</span>
+      </div>
+      
+      {plot.calculated_activity_date && (
+        <div className="flex items-center gap-1 text-xs text-orange-600">
+          <Calendar className="h-3 w-3" />
+          <span className="font-medium">Activity:</span>
+          <span>{format(new Date(plot.calculated_activity_date), "MMM d, yyyy")}</span>
+          {plot.days_until_activity !== undefined && (
+            <Badge variant="outline" className="ml-1 text-xs">
+              {plot.days_until_activity > 0 ? `in ${plot.days_until_activity}d` : 
+               plot.days_until_activity === 0 ? 'Today!' : 
+               `${Math.abs(plot.days_until_activity)}d overdue`}
+            </Badge>
+          )}
+        </div>
+      )}
+    </div>
+  </div>
+))}
 
                 {/* Add Plot Button */}
                 <Button 
@@ -689,13 +793,69 @@ const downloadCalendar = (farmer: Farmer) => {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Activity Name</Label>
-                <Input
-                  value={plotData.activity_name}
-                  onChange={(e) => setPlotData({ ...plotData, activity_name: e.target.value })}
-                  placeholder="e.g., SSN, Anushka"
-                />
-              </div>
+                  <Label>Crop *</Label>
+                  <Select 
+                    value={plotData.crop} 
+                    onValueChange={(value) => setPlotData({ 
+                      ...plotData, 
+                      crop: value,
+                      crop_variety: "",  // Reset variety when crop changes
+                      activity: ""  // Reset activity when crop changes
+                    })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a crop" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {crops.map((crop) => (
+                        <SelectItem key={crop.id} value={crop.id}>
+                          {crop.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* ✅ ADD Crop Variety Dropdown */}
+                <div className="space-y-2">
+                  <Label>Crop Variety (Optional)</Label>
+                  <Select 
+                    value={plotData.crop_variety} 
+                    onValueChange={(value) => setPlotData({ ...plotData, crop_variety: value })}
+                    disabled={!plotData.crop}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select variety" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cropVarieties.map((variety) => (
+                        <SelectItem key={variety.id} value={variety.id}>
+                          {variety.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* ✅ REPLACE Activity Name input with Activity Dropdown */}
+                <div className="space-y-2">
+                  <Label>Activity *</Label>
+                  <Select 
+                    value={plotData.activity} 
+                    onValueChange={(value) => setPlotData({ ...plotData, activity: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an activity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activities.map((activity) => (
+                        <SelectItem key={activity.id} value={activity.id}>
+                          {activity.name} (perform {activity.days_after_pruning} days after pruning)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               <div className="space-y-2">
                 <Label>Pruning Date *</Label>
                 <Input
@@ -704,6 +864,20 @@ const downloadCalendar = (farmer: Farmer) => {
                   onChange={(e) => setPlotData({ ...plotData, pruning_date: e.target.value })}
                 />
               </div>
+              {plotData.activity && plotData.pruning_date && activities.find(a => a.id === plotData.activity) && (
+                  <p className="text-xs text-muted-foreground bg-blue-50 p-2 rounded">
+                    ℹ️ Activity will be performed on:{" "}
+                    <span className="font-medium text-blue-600">
+                      {format(
+                        new Date(
+                          new Date(plotData.pruning_date).getTime() + 
+                          (activities.find(a => a.id === plotData.activity)?.days_after_pruning || 0) * 24 * 60 * 60 * 1000
+                        ),
+                        "MMMM d, yyyy"
+                      )}
+                    </span>
+                  </p>
+                )}
               <div className="flex gap-2 pt-4">
                 <Button variant="outline" onClick={() => setShowAddPlotDialog(false)} className="flex-1">
                   Cancel
@@ -740,12 +914,69 @@ const downloadCalendar = (farmer: Farmer) => {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Activity Name</Label>
-                <Input
-                  value={plotData.activity_name}
-                  onChange={(e) => setPlotData({ ...plotData, activity_name: e.target.value })}
-                />
-              </div>
+                  <Label>Crop *</Label>
+                  <Select 
+                    value={plotData.crop} 
+                    onValueChange={(value) => setPlotData({ 
+                      ...plotData, 
+                      crop: value,
+                      crop_variety: "",  // Reset variety when crop changes
+                      activity: ""  // Reset activity when crop changes
+                    })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a crop" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {crops.map((crop) => (
+                        <SelectItem key={crop.id} value={crop.id}>
+                          {crop.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* ✅ ADD Crop Variety Dropdown */}
+                <div className="space-y-2">
+                  <Label>Crop Variety (Optional)</Label>
+                  <Select 
+                    value={plotData.crop_variety} 
+                    onValueChange={(value) => setPlotData({ ...plotData, crop_variety: value })}
+                    disabled={!plotData.crop}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select variety" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cropVarieties.map((variety) => (
+                        <SelectItem key={variety.id} value={variety.id}>
+                          {variety.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* ✅ REPLACE Activity Name input with Activity Dropdown */}
+                <div className="space-y-2">
+                  <Label>Activity *</Label>
+                  <Select 
+                    value={plotData.activity} 
+                    onValueChange={(value) => setPlotData({ ...plotData, activity: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an activity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activities.map((activity) => (
+                        <SelectItem key={activity.id} value={activity.id}>
+                          {activity.name} (perform {activity.days_after_pruning} days after pruning)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               <div className="space-y-2">
                 <Label>Pruning Date *</Label>
                 <Input
@@ -754,6 +985,20 @@ const downloadCalendar = (farmer: Farmer) => {
                   onChange={(e) => setPlotData({ ...plotData, pruning_date: e.target.value })}
                 />
               </div>
+              {plotData.activity && plotData.pruning_date && activities.find(a => a.id === plotData.activity) && (
+                  <p className="text-xs text-muted-foreground bg-blue-50 p-2 rounded">
+                    ℹ️ Activity will be performed on:{" "}
+                    <span className="font-medium text-blue-600">
+                      {format(
+                        new Date(
+                          new Date(plotData.pruning_date).getTime() + 
+                          (activities.find(a => a.id === plotData.activity)?.days_after_pruning || 0) * 24 * 60 * 60 * 1000
+                        ),
+                        "MMMM d, yyyy"
+                      )}
+                    </span>
+                  </p>
+                )}
               <div className="flex gap-2 pt-4">
                 <Button variant="outline" onClick={() => setShowEditPlotDialog(false)} className="flex-1">
                   Cancel

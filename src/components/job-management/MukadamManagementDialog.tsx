@@ -103,7 +103,7 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
   const { data: activities = [] } = useQuery({
     queryKey: ["activities"],
     queryFn: async (): Promise<Activity[]> => {
-      const response = await fetch("https://workcrop.onrender.com/api/activities/");
+      const response = await fetch("http://127.0.0.1:8000/api/activities/");
       if (!response.ok) throw new Error("Failed to fetch activities");
       const data = await response.json();
       return data.results || data;
@@ -115,7 +115,7 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
   const { data: mukadams = [] } = useQuery({
     queryKey: ["mukadams-detailed"],
     queryFn: async (): Promise<MukadamDetail[]> => {
-      const response = await fetch("https://workcrop.onrender.com/api/mukadams/?detailed=true");
+      const response = await fetch("http://127.0.0.1:8000/api/mukadams/?detailed=true");
       if (!response.ok) throw new Error("Failed to fetch mukadams");
       const data = await response.json();
       console.log("🔍 Mukadams with rates:", data);
@@ -129,65 +129,87 @@ export function MukadamManagementDialog({ open, onOpenChange }: MukadamManagemen
     queryKey: ["mukadam-job-history", viewingProfile],
     queryFn: async (): Promise<JobHistoryResponse> => {
       if (!viewingProfile) return { mukadam: {} as MukadamDetail, jobs: [], summary: {} as any };
-      const response = await fetch(`https://workcrop.onrender.com/api/mukadams/${viewingProfile}/job_history/`);
+      const response = await fetch(`http://127.0.0.1:8000/api/mukadams/${viewingProfile}/job_history/`);
       if (!response.ok) throw new Error("Failed to fetch job history");
       return response.json();
     },
     enabled: !!viewingProfile,
   });
+ // Update the addMukadamMutation in MukadamManagementDialog.tsx
 
-  const addMukadamMutation = useMutation({
-    mutationFn: async (mukadamData: any) => {
-      const url = isEditMode ? 
-        `https://workcrop.onrender.com/api/mukadams/${editingMukadam?.id}/` : 
-        "https://workcrop.onrender.com/api/mukadams/";
-      
-      const method = isEditMode ? "PATCH" : "POST";
-      
-      const mukadamResponse = await fetch(url, {
-        method,
+const addMukadamMutation = useMutation({
+  mutationFn: async (mukadamData: any) => {
+    const url = isEditMode ? 
+      `http://127.0.0.1:8000/api/mukadams/${editingMukadam?.id}/` : 
+      "http://127.0.0.1:8000/api/mukadams/";
+    
+    const method = isEditMode ? "PATCH" : "POST";
+    
+    const mukadamResponse = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: mukadamData.name,
+        phone: mukadamData.phone,
+        location: mukadamData.location,
+        number_of_labourers: mukadamData.number_of_labourers,
+        is_active: mukadamData.is_active ?? true,
+      }),
+    });
+    
+    if (!mukadamResponse.ok) throw new Error(`Failed to ${isEditMode ? 'update' : 'add'} mukadam`);
+    const mukadam = await mukadamResponse.json();
+    
+    // ✅ FIX: Correct structure for bulk_create
+    const activityRates = Object.entries(mukadamData.activities)
+      .filter(([activityId, data]: [string, any]) => {
+        // Validate that we have a valid activity ID and rate
+        return data.selected && 
+               data.rate && 
+               activityId !== 'undefined' && 
+               activityId !== 'null' &&
+               parseFloat(data.rate) > 0;
+      })
+      .map(([activityId, data]: [string, any]) => ({
+        activity_id: activityId,  // ✅ Changed from 'activity' to 'activity_id'
+        rate_per_acre: parseFloat(data.rate),
+        is_available: true,
+      }));
+
+    console.log("📤 Sending activity rates:", activityRates); // Debug log
+
+    if (activityRates.length > 0) {
+      // ✅ FIX: Send with correct structure including mukadam_id
+      const ratesResponse = await fetch("http://127.0.0.1:8000/api/mukadam-activity-rates/bulk_create/", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: mukadamData.name,
-          phone: mukadamData.phone,
-          location: mukadamData.location,
-          number_of_labourers: mukadamData.number_of_labourers,
-          is_active: mukadamData.is_active ?? true,
+        body: JSON.stringify({ 
+          mukadam_id: mukadam.id,  // ✅ IMPORTANT: Include mukadam_id
+          rates: activityRates 
         }),
       });
-      
-      if (!mukadamResponse.ok) throw new Error(`Failed to ${isEditMode ? 'update' : 'add'} mukadam`);
-      const mukadam = await mukadamResponse.json();
-      
-      const activityRates = Object.entries(mukadamData.activities)
-        .filter(([_, data]: [string, any]) => data.selected && data.rate)
-        .map(([activityId, data]: [string, any]) => ({
-          mukadam: mukadam.id,
-          activity: activityId,
-          rate_per_acre: parseFloat(data.rate),
-          is_available: true,
-        }));
 
-      if (activityRates.length > 0) {
-        await fetch("https://workcrop.onrender.com/api/mukadam-activity-rates/bulk_create/", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rates: activityRates }),
-        });
+      if (!ratesResponse.ok) {
+        const error = await ratesResponse.json();
+        console.error("❌ Failed to save rates:", error);
+        throw new Error(`Failed to save activity rates: ${error.error || 'Unknown error'}`);
       }
 
-      return mukadam;
-    },
-    onSuccess: () => {
-      toast.success(`Mukadam ${isEditMode ? 'updated' : 'added'} successfully!`);
-      queryClient.invalidateQueries({ queryKey: ["mukadams-detailed"] });
-      resetForm();
-    },
-    onError: (error) => {
-      toast.error(`Failed to ${isEditMode ? 'update' : 'add'} mukadam: ` + error.message);
-    },
-  });
+      const ratesResult = await ratesResponse.json();
+      console.log("✅ Activity rates saved:", ratesResult);
+    }
 
+    return mukadam;
+  },
+  onSuccess: () => {
+    toast.success(`Mukadam ${isEditMode ? 'updated' : 'added'} successfully!`);
+    queryClient.invalidateQueries({ queryKey: ["mukadams-detailed"] });
+    resetForm();
+  },
+  onError: (error) => {
+    toast.error(`Failed to ${isEditMode ? 'update' : 'add'} mukadam: ` + error.message);
+  },
+}); 
   const resetForm = () => {
     setName("");
     setPhone("");
