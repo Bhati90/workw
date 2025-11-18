@@ -58,11 +58,11 @@ const App = () => (
       <BrowserRouter >
         <Routes>
           {/* <Route path="/login" element={<Login />} /> */}
-<Route path="/"
+{/* <Route path="/"
             element={
               <SimpleJobList />
             }
-          />
+          /> */}
 
           <Route path="/form"
             element={
@@ -70,7 +70,7 @@ const App = () => (
             }
           />
 
-          
+{/*           
          
 <Route path="/farmers" element={<FarmersList />} />
 <Route path="/farmers/:farmerId" element={<FarmerProfileWrapper />} />
@@ -91,7 +91,9 @@ const App = () => (
                 <CalendarAvailability />
               
             }
-          />{/*
+          />
+           */}
+          {/*
           <Route
             path="/bookings"
             element={
