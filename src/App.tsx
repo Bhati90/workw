@@ -58,17 +58,17 @@ const App = () => (
       <BrowserRouter >
         <Routes>
           {/* <Route path="/login" element={<Login />} /> */}
-{/* <Route path="/"
-            element={
-              <SimpleJobList />
-            }
-          /> */}
-
-          <Route path="/form"
+<Route path="/"
             element={
               <MukkadamForm />
             }
           />
+
+          {/* <Route path="/form"
+            element={
+              <MukkadamForm />
+            }
+          /> */}
 
 {/*           
          
